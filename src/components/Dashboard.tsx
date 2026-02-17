@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Download, FileText, CheckSquare } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import * as XLSX from 'xlsx';
+import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X } from 'lucide-react';
 import { exportToExcel, generateDummyData } from '../utils/excelExport';
 
 // 개체번호 데이터 타입
@@ -11,39 +12,179 @@ interface AnimalData {
   selected: boolean;
 }
 
+type Message = { type: 'success' | 'error' | 'warning'; text: string } | null;
+
+// 엑셀 날짜 직렬 번호 또는 문자열 → YYYY-MM-DD 변환
+const formatDateFromExcel = (value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'number') {
+    // 엑셀 날짜 직렬 번호 (1900-01-00 기준)
+    const date = new Date(Math.round((value - 25569) * 86400 * 1000));
+    return date.toISOString().slice(0, 10);
+  }
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    if (/^\d{8}$/.test(t)) return `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`;
+    return t || '-';
+  }
+  return '-';
+};
+
 const Dashboard: React.FC = () => {
-  // 섹션 A: 등급판정서 출력용 더미 데이터
-  const [animalList, setAnimalList] = useState<AnimalData[]>([
-    { id: 1, animalNumber: '002-1234-5678', breed: '한우', birthDate: '2023-05-10', selected: false },
-    { id: 2, animalNumber: '002-1234-5679', breed: '한우', birthDate: '2023-06-15', selected: false },
-    { id: 3, animalNumber: '002-1234-5680', breed: '한우', birthDate: '2023-07-20', selected: false },
-    { id: 4, animalNumber: '002-1234-5681', breed: '한우', birthDate: '2023-08-25', selected: false },
-    { id: 5, animalNumber: '002-1234-5682', breed: '한우', birthDate: '2023-09-30', selected: false },
-  ]);
+  const [animalList, setAnimalList] = useState<AnimalData[]>([]);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [message, setMessage] = useState<Message>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 섹션 B: 농림부 보고용 조회 월
   const [selectedMonth, setSelectedMonth] = useState<string>(
-    new Date().toISOString().slice(0, 7) // YYYY-MM 형식
+    new Date().toISOString().slice(0, 7)
   );
 
-  // 전체 선택/해제 토글
+  // ── 메시지 표시 (3초 후 자동 해제) ─────────────────────────────
+  const showMessage = (msg: Message) => {
+    setMessage(msg);
+    if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
+    if (msg) {
+      messageTimerRef.current = setTimeout(() => setMessage(null), 3000);
+    }
+  };
+
+  // ── 개체번호 추가 (중복 제거 포함) ────────────────────────────
+  const addAnimals = (newItems: Omit<AnimalData, 'id' | 'selected'>[]) => {
+    const existingNumbers = new Set(animalList.map((a) => a.animalNumber));
+    let nextId = Math.max(0, ...animalList.map((a) => a.id)) + 1;
+
+    const added: AnimalData[] = [];
+    let duplicateCount = 0;
+
+    for (const item of newItems) {
+      if (existingNumbers.has(item.animalNumber)) {
+        duplicateCount++;
+      } else {
+        added.push({ ...item, id: nextId++, selected: false });
+        existingNumbers.add(item.animalNumber);
+      }
+    }
+
+    if (added.length > 0) {
+      setAnimalList((prev) => [...prev, ...added]);
+      let msg = `${added.length}건 추가되었습니다.`;
+      if (duplicateCount > 0) msg += ` (중복 ${duplicateCount}건 제외)`;
+      showMessage({ type: 'success', text: msg });
+    } else if (duplicateCount > 0) {
+      showMessage({ type: 'warning', text: `중복된 개체번호 ${duplicateCount}건은 추가되지 않았습니다.` });
+    }
+  };
+
+  // ── 엑셀 파일 가져오기 ─────────────────────────────────────────
+  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+          header: 1,
+          defval: '',
+        }) as unknown[][];
+
+        if (rows.length === 0) {
+          showMessage({ type: 'error', text: '엑셀 파일에 데이터가 없습니다.' });
+          return;
+        }
+
+        // 헤더 행에서 열 인덱스 찾기
+        const headerRow = (rows[0] as unknown[]).map((c) => String(c ?? ''));
+        const animalColIdx = headerRow.findIndex((h) =>
+          h.includes('개체번호') || h.includes('이력번호') || h.includes('관리번호')
+        );
+        const breedColIdx = headerRow.findIndex((h) =>
+          h.includes('품종') || h.includes('축종') || h.includes('종류')
+        );
+        const birthDateColIdx = headerRow.findIndex((h) =>
+          h.includes('생년월일') || h.includes('출생') || h.includes('생산일')
+        );
+
+        // 헤더가 없으면 첫 번째 열을 개체번호로 간주
+        const colIdx = animalColIdx === -1 ? 0 : animalColIdx;
+        const dataRows = animalColIdx === -1 ? rows : rows.slice(1);
+
+        const items: Omit<AnimalData, 'id' | 'selected'>[] = [];
+        for (const row of dataRows) {
+          const r = row as unknown[];
+          const animalNumber = String(r[colIdx] ?? '').trim();
+          if (!animalNumber) continue;
+          const breed =
+            breedColIdx >= 0 ? String(r[breedColIdx] ?? '').trim() || '-' : '-';
+          const birthDate =
+            birthDateColIdx >= 0 ? formatDateFromExcel(r[birthDateColIdx]) : '-';
+          items.push({ animalNumber, breed, birthDate });
+        }
+
+        if (items.length === 0) {
+          showMessage({ type: 'error', text: '유효한 개체번호를 찾을 수 없습니다.' });
+        } else {
+          addAnimals(items);
+        }
+      } catch {
+        showMessage({ type: 'error', text: '엑셀 파일을 읽는 중 오류가 발생했습니다.' });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = ''; // 파일 입력 초기화 (같은 파일 재업로드 가능)
+  };
+
+  // ── 바코드/직접 입력 추가 ──────────────────────────────────────
+  const handleBarcodeAdd = () => {
+    const trimmed = barcodeInput.trim();
+    if (!trimmed) return;
+    addAnimals([{ animalNumber: trimmed, breed: '-', birthDate: '-' }]);
+    setBarcodeInput('');
+    barcodeInputRef.current?.focus();
+  };
+
+  const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleBarcodeAdd();
+  };
+
+  // ── 선택 / 삭제 ────────────────────────────────────────────────
   const handleToggleAll = () => {
     const allSelected = animalList.every((item) => item.selected);
-    setAnimalList(
-      animalList.map((item) => ({ ...item, selected: !allSelected }))
-    );
+    setAnimalList(animalList.map((item) => ({ ...item, selected: !allSelected })));
   };
 
-  // 개별 항목 선택/해제
   const handleToggleItem = (id: number) => {
     setAnimalList(
-      animalList.map((item) =>
-        item.id === id ? { ...item, selected: !item.selected } : item
-      )
+      animalList.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item))
     );
   };
 
-  // 등급판정서 일괄 출력 (섹션 A)
+  const handleDeleteSelected = () => {
+    setAnimalList(animalList.filter((item) => !item.selected));
+    showMessage({ type: 'success', text: '선택 항목을 삭제했습니다.' });
+  };
+
+  const handleDeleteItem = (id: number) => {
+    setAnimalList((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleClearAll = () => {
+    if (animalList.length === 0) return;
+    if (window.confirm('개체 목록 전체를 초기화하겠습니까?')) {
+      setAnimalList([]);
+      showMessage({ type: 'success', text: '목록을 초기화했습니다.' });
+    }
+  };
+
+  // ── 등급판정서 일괄 출력 ───────────────────────────────────────
   const handlePrintGradeCertificates = () => {
     const selectedItems = animalList.filter((item) => item.selected);
     if (selectedItems.length === 0) {
@@ -55,29 +196,27 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  // 농림부 보고용 엑셀 다운로드 (섹션 B)
+  // ── 농림부 보고 엑셀 다운로드 ─────────────────────────────────
   const handleDownloadExcel = () => {
-    // 더미 데이터 생성 (실제로는 선택된 월의 데이터를 API로부터 가져와야 함)
     const dummyData = generateDummyData(20);
-
-    // 선택된 월에 해당하는 데이터만 필터링 (데모용)
     const filteredData = dummyData.filter((item) =>
       item.productionDate.startsWith(selectedMonth)
     );
-
     if (filteredData.length === 0) {
       alert(`${selectedMonth}에 해당하는 생산 데이터가 없습니다.`);
       return;
     }
-
-    // 엑셀 파일명 생성
     const fileName = `농림부_보고_${selectedMonth.replace('-', '')}.xlsx`;
-
-    // 엑셀 다운로드 실행
     exportToExcel(filteredData, fileName);
   };
 
   const selectedCount = animalList.filter((item) => item.selected).length;
+
+  const messageBg: Record<string, string> = {
+    success: 'bg-green-50 border-green-400 text-green-800',
+    error: 'bg-red-50 border-red-400 text-red-800',
+    warning: 'bg-yellow-50 border-yellow-400 text-yellow-800',
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
@@ -93,7 +232,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 섹션 A: 서류 일괄 출력 */}
+          {/* ── 섹션 A: 등급판정서 일괄 출력 ── */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex items-center mb-4">
               <FileText className="w-6 h-6 text-blue-600 mr-2" />
@@ -102,53 +241,168 @@ const Dashboard: React.FC = () => {
               </h2>
             </div>
 
-            <div className="mb-4 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                선택된 항목: <span className="font-semibold text-blue-600">{selectedCount}건</span>
+            {/* 개체번호 입력 패널 */}
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                개체번호 추가
+              </p>
+
+              <div className="flex flex-col gap-2">
+                {/* 엑셀 파일 업로드 */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-700 rounded-md text-sm font-medium transition-colors"
+                >
+                  <Upload className="w-4 h-4" />
+                  엑셀 파일 가져오기 (.xlsx / .xls)
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleExcelImport}
+                />
+
+                {/* 구분선 */}
+                <div className="flex items-center gap-2 text-xs text-gray-400 select-none">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  또는
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+
+                {/* 바코드 스캔 / 직접 입력 */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Scan className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      ref={barcodeInputRef}
+                      type="text"
+                      value={barcodeInput}
+                      onChange={(e) => setBarcodeInput(e.target.value)}
+                      onKeyDown={handleBarcodeKeyDown}
+                      placeholder="바코드 스캔 또는 직접 입력 후 Enter"
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <button
+                    onClick={handleBarcodeAdd}
+                    disabled={!barcodeInput.trim()}
+                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    추가
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={handleToggleAll}
-                className="flex items-center px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-              >
-                <CheckSquare className="w-4 h-4 mr-1" />
-                전체 {animalList.every((item) => item.selected) ? '해제' : '선택'}
-              </button>
+
+              {/* 피드백 메시지 */}
+              {message && (
+                <div
+                  className={`mt-2 px-3 py-2 rounded border-l-4 text-xs ${messageBg[message.type]}`}
+                >
+                  {message.text}
+                </div>
+              )}
+            </div>
+
+            {/* 테이블 상단 컨트롤 */}
+            <div className="mb-3 flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                총 <span className="font-semibold">{animalList.length}</span>건 &nbsp;|&nbsp;
+                선택{' '}
+                <span className="font-semibold text-blue-600">{selectedCount}</span>건
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleToggleAll}
+                  disabled={animalList.length === 0}
+                  className="flex items-center px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-40"
+                >
+                  <CheckSquare className="w-4 h-4 mr-1" />
+                  전체{' '}
+                  {animalList.length > 0 && animalList.every((i) => i.selected)
+                    ? '해제'
+                    : '선택'}
+                </button>
+                {selectedCount > 0 && (
+                  <button
+                    onClick={handleDeleteSelected}
+                    className="flex items-center px-3 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-600 rounded-md transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    선택 삭제
+                  </button>
+                )}
+                {animalList.length > 0 && (
+                  <button
+                    onClick={handleClearAll}
+                    className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-md transition-colors"
+                  >
+                    초기화
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* 개체 리스트 테이블 */}
-            <div className="overflow-x-auto mb-4">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-2 text-left">선택</th>
-                    <th className="px-4 py-2 text-left">개체번호</th>
-                    <th className="px-4 py-2 text-left">품종</th>
-                    <th className="px-4 py-2 text-left">생년월일</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {animalList.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={`border-b hover:bg-gray-50 transition-colors ${
-                        item.selected ? 'bg-blue-50' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={item.selected}
-                          onChange={() => handleToggleItem(item.id)}
-                          className="w-4 h-4 cursor-pointer"
-                        />
-                      </td>
-                      <td className="px-4 py-3 font-mono">{item.animalNumber}</td>
-                      <td className="px-4 py-3">{item.breed}</td>
-                      <td className="px-4 py-3">{item.birthDate}</td>
+            <div
+              className="overflow-auto mb-4 rounded border border-gray-200"
+              style={{ maxHeight: '260px' }}
+            >
+              {animalList.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <Scan className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">개체번호를 추가해 주세요.</p>
+                  <p className="text-xs mt-1">
+                    엑셀 업로드 또는 바코드 스캔으로 입력할 수 있습니다.
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-100 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left w-10">선택</th>
+                      <th className="px-4 py-2 text-left">개체번호</th>
+                      <th className="px-4 py-2 text-left">품종</th>
+                      <th className="px-4 py-2 text-left">생년월일</th>
+                      <th className="px-4 py-2 w-8"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {animalList.map((item) => (
+                      <tr
+                        key={item.id}
+                        className={`border-b hover:bg-gray-50 transition-colors ${
+                          item.selected ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <td className="px-4 py-2.5">
+                          <input
+                            type="checkbox"
+                            checked={item.selected}
+                            onChange={() => handleToggleItem(item.id)}
+                            className="w-4 h-4 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-xs">
+                          {item.animalNumber}
+                        </td>
+                        <td className="px-4 py-2.5">{item.breed}</td>
+                        <td className="px-4 py-2.5">{item.birthDate}</td>
+                        <td className="px-4 py-2.5">
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             {/* 일괄 출력 버튼 */}
@@ -168,7 +422,7 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* 섹션 B: 농림부 보고 자동화 */}
+          {/* ── 섹션 B: 농림부 보고 자동화 ── */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex items-center mb-4">
               <Download className="w-6 h-6 text-green-600 mr-2" />
@@ -203,11 +457,14 @@ const Dashboard: React.FC = () => {
                 <ul className="text-sm text-gray-600 space-y-1">
                   <li>• 파일명: 농림부_보고_{selectedMonth.replace('-', '')}.xlsx</li>
                   <li>• 조회 기간: {selectedMonth}</li>
-                  <li>• 포함 항목: 연번, 생산일자, 이력번호, 품목명, 부위명, 생산중량, 보고상태, 비고</li>
+                  <li>
+                    • 포함 항목: 연번, 생산일자, 이력번호, 품목명, 부위명, 생산중량,
+                    보고상태, 비고
+                  </li>
                 </ul>
               </div>
 
-              {/* 엑셀 다운로드 메인 버튼 */}
+              {/* 엑셀 다운로드 버튼 */}
               <button
                 onClick={handleDownloadExcel}
                 className="w-full flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 shadow-md hover:shadow-lg transition-all"
@@ -220,7 +477,8 @@ const Dashboard: React.FC = () => {
             {/* 안내 사항 */}
             <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
               <p className="text-sm text-yellow-800">
-                <strong>안내:</strong> 다운로드된 엑셀 파일을 확인한 후 농림부 시스템에 업로드하시기 바랍니다.
+                <strong>안내:</strong> 다운로드된 엑셀 파일을 확인한 후 농림부 시스템에
+                업로드하시기 바랍니다.
               </p>
             </div>
           </div>
