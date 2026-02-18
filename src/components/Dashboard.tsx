@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon } from 'lucide-react';
 import { exportToExcel, generateDummyData } from '../utils/excelExport';
 
 // 개체번호 데이터 타입
@@ -148,10 +149,42 @@ const Dashboard: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) processExcelFile(file);
-    e.target.value = '';
+  // ── 이미지 파일에서 바코드 인식 ──────────────────────────────
+  const processImageFile = async (file: File) => {
+    showMessage({ type: 'warning', text: '바코드 인식 중...' });
+    const url = URL.createObjectURL(file);
+    try {
+      const reader = new BrowserMultiFormatReader();
+      const result = await reader.decodeFromImageUrl(url);
+      const value = result.getText().trim();
+      if (!value) {
+        showMessage({ type: 'error', text: '바코드를 인식하지 못했습니다.' });
+        return;
+      }
+      addAnimals([{ animalNumber: value, breed: '-', birthDate: '-' }]);
+    } catch {
+      showMessage({ type: 'error', text: '바코드를 인식하지 못했습니다. 이미지가 선명한지 확인해 주세요.' });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  // ── 드롭된 파일 종류 판별 후 분기 처리 ───────────────────────
+  const processDroppedFile = (file: File) => {
+    const isImage = /\.(jpe?g|png|bmp|gif|webp|tiff?)$/i.test(file.name) || file.type.startsWith('image/');
+    const isExcel = /\.(xlsx|xls|csv)$/i.test(file.name) || [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+    ].includes(file.type);
+
+    if (isImage) {
+      void processImageFile(file);
+    } else if (isExcel) {
+      processExcelFile(file);
+    } else {
+      showMessage({ type: 'error', text: '엑셀(.xlsx/.xls/.csv) 또는 이미지 파일만 지원합니다.' });
+    }
   };
 
   // ── 드래그 앤 드롭 ────────────────────────────────────────────
@@ -161,7 +194,6 @@ const Dashboard: React.FC = () => {
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    // 자식 요소로 이동할 때 false 처리되지 않도록 currentTarget 확인
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDragOver(false);
     }
@@ -171,7 +203,7 @@ const Dashboard: React.FC = () => {
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) processExcelFile(file);
+    if (file) processDroppedFile(file);
   };
 
   // ── 바코드/직접 입력 추가 ──────────────────────────────────────
@@ -287,7 +319,7 @@ const Dashboard: React.FC = () => {
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`flex flex-col items-center justify-center gap-1 px-4 py-5 rounded-lg border-2 border-dashed cursor-pointer transition-all select-none ${
+                  className={`flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border-2 border-dashed cursor-pointer transition-all select-none ${
                     isDragOver
                       ? 'border-blue-500 bg-blue-100 scale-[1.01]'
                       : 'border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-400'
@@ -295,16 +327,31 @@ const Dashboard: React.FC = () => {
                 >
                   <Upload className={`w-5 h-5 ${isDragOver ? 'text-blue-600' : 'text-blue-400'}`} />
                   <span className={`text-sm font-medium ${isDragOver ? 'text-blue-700' : 'text-blue-600'}`}>
-                    {isDragOver ? '여기에 놓으세요' : '엑셀 파일을 여기에 드래그하거나 클릭하여 선택'}
+                    {isDragOver ? '여기에 놓으세요' : '파일을 드래그하거나 클릭하여 선택'}
                   </span>
-                  <span className="text-xs text-gray-400">.xlsx / .xls / .csv</span>
+                  {/* 지원 파일 유형 안내 */}
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                      <Upload className="w-3 h-3" />
+                      엑셀 .xlsx / .xls / .csv
+                    </span>
+                    <span className="text-gray-300">|</span>
+                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                      <ImageIcon className="w-3 h-3" />
+                      바코드 이미지 .jpg / .png
+                    </span>
+                  </div>
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".xlsx,.xls,.csv"
+                  accept=".xlsx,.xls,.csv,image/*"
                   className="hidden"
-                  onChange={handleExcelImport}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) processDroppedFile(file);
+                    e.target.value = '';
+                  }}
                 />
 
                 {/* 구분선 */}
