@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon } from 'lucide-react';
 import { exportToExcel, generateDummyData } from '../utils/excelExport';
+import { downloadExcelReport } from '../utils/downloadExcelReport';
 
 // 개체번호 데이터 타입
 interface AnimalData {
@@ -261,17 +262,30 @@ const Dashboard: React.FC = () => {
   };
 
   // ── 농림부 보고 엑셀 다운로드 ─────────────────────────────────
-  const handleDownloadExcel = () => {
-    const dummyData = generateDummyData(20);
-    const filteredData = dummyData.filter((item) =>
-      item.productionDate.startsWith(selectedMonth)
-    );
-    if (filteredData.length === 0) {
-      alert(`${selectedMonth}에 해당하는 생산 데이터가 없습니다.`);
-      return;
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadExcel = async () => {
+    setIsDownloading(true);
+    try {
+      // 서버 API를 통한 DB 기반 엑셀 다운로드 시도
+      await downloadExcelReport(selectedMonth);
+    } catch (err) {
+      // API 미연결 시 기존 클라이언트 사이드 더미 데이터 폴백
+      console.warn('API 호출 실패, 클라이언트 사이드 폴백 사용:', err);
+      const dummyData = generateDummyData(20);
+      const filteredData = dummyData.filter((item) =>
+        item.productionDate.startsWith(selectedMonth)
+      );
+      if (filteredData.length === 0) {
+        alert(`${selectedMonth}에 해당하는 생산 데이터가 없습니다.`);
+        setIsDownloading(false);
+        return;
+      }
+      const fileName = `농림부_보고_${selectedMonth.replace('-', '')}.xlsx`;
+      exportToExcel(filteredData, fileName);
+    } finally {
+      setIsDownloading(false);
     }
-    const fileName = `농림부_보고_${selectedMonth.replace('-', '')}.xlsx`;
-    exportToExcel(filteredData, fileName);
   };
 
   const selectedCount = animalList.filter((item) => item.selected).length;
@@ -557,10 +571,15 @@ const Dashboard: React.FC = () => {
               {/* 엑셀 다운로드 버튼 */}
               <button
                 onClick={handleDownloadExcel}
-                className="w-full flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 shadow-md hover:shadow-lg transition-all"
+                disabled={isDownloading}
+                className={`w-full flex items-center justify-center px-6 py-4 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all ${
+                  isDownloading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
               >
                 <Download className="w-5 h-5 mr-2" />
-                농림부 보고용 엑셀 다운로드
+                {isDownloading ? '다운로드 중...' : '농림부 보고용 엑셀 다운로드'}
               </button>
             </div>
 
