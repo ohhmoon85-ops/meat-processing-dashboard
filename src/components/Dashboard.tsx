@@ -35,6 +35,7 @@ const Dashboard: React.FC = () => {
   const [animalList, setAnimalList] = useState<AnimalData[]>([]);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [message, setMessage] = useState<Message>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -80,10 +81,17 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // ── 엑셀 파일 가져오기 ─────────────────────────────────────────
-  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ── 엑셀 파일 파싱 (클릭 업로드 / 드래그 앤 드롭 공용) ─────────
+  const processExcelFile = (file: File) => {
+    const allowed = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+    ];
+    if (!allowed.includes(file.type) && !/\.(xlsx|xls|csv)$/i.test(file.name)) {
+      showMessage({ type: 'error', text: 'xlsx / xls / csv 파일만 지원합니다.' });
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -113,7 +121,6 @@ const Dashboard: React.FC = () => {
           h.includes('생년월일') || h.includes('출생') || h.includes('생산일')
         );
 
-        // 헤더가 없으면 첫 번째 열을 개체번호로 간주
         const colIdx = animalColIdx === -1 ? 0 : animalColIdx;
         const dataRows = animalColIdx === -1 ? rows : rows.slice(1);
 
@@ -139,7 +146,32 @@ const Dashboard: React.FC = () => {
       }
     };
     reader.readAsArrayBuffer(file);
-    e.target.value = ''; // 파일 입력 초기화 (같은 파일 재업로드 가능)
+  };
+
+  const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processExcelFile(file);
+    e.target.value = '';
+  };
+
+  // ── 드래그 앤 드롭 ────────────────────────────────────────────
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // 자식 요소로 이동할 때 false 처리되지 않도록 currentTarget 확인
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processExcelFile(file);
   };
 
   // ── 바코드/직접 입력 추가 ──────────────────────────────────────
@@ -248,14 +280,25 @@ const Dashboard: React.FC = () => {
               </p>
 
               <div className="flex flex-col gap-2">
-                {/* 엑셀 파일 업로드 */}
-                <button
+                {/* 엑셀 파일 업로드 — 드래그 앤 드롭 존 */}
+                <div
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-700 rounded-md text-sm font-medium transition-colors"
+                  className={`flex flex-col items-center justify-center gap-1 px-4 py-5 rounded-lg border-2 border-dashed cursor-pointer transition-all select-none ${
+                    isDragOver
+                      ? 'border-blue-500 bg-blue-100 scale-[1.01]'
+                      : 'border-blue-300 bg-blue-50 hover:bg-blue-100 hover:border-blue-400'
+                  }`}
                 >
-                  <Upload className="w-4 h-4" />
-                  엑셀 파일 가져오기 (.xlsx / .xls)
-                </button>
+                  <Upload className={`w-5 h-5 ${isDragOver ? 'text-blue-600' : 'text-blue-400'}`} />
+                  <span className={`text-sm font-medium ${isDragOver ? 'text-blue-700' : 'text-blue-600'}`}>
+                    {isDragOver ? '여기에 놓으세요' : '엑셀 파일을 여기에 드래그하거나 클릭하여 선택'}
+                  </span>
+                  <span className="text-xs text-gray-400">.xlsx / .xls / .csv</span>
+                </div>
                 <input
                   ref={fileInputRef}
                   type="file"
