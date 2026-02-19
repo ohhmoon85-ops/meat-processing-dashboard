@@ -4,6 +4,7 @@ import { BrowserMultiFormatReader } from '@zxing/browser';
 import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon } from 'lucide-react';
 import { exportToExcel, generateDummyData } from '../utils/excelExport';
 import { downloadExcelReport } from '../utils/downloadExcelReport';
+import GradeCertificatePrintModal from './GradeCertificatePrintModal';
 
 // 개체번호 데이터 타입
 interface AnimalData {
@@ -38,6 +39,7 @@ const Dashboard: React.FC = () => {
   const [barcodeInput, setBarcodeInput] = useState('');
   const [message, setMessage] = useState<Message>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [certModalAnimals, setCertModalAnimals] = useState<AnimalData[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -345,9 +347,7 @@ const Dashboard: React.FC = () => {
       alert('출력할 개체를 선택해 주세요.');
       return;
     }
-    alert(
-      `선택된 ${selectedItems.length}건의 등급판정서 출력 준비 중...\n(API 연동 후 실제 출력 기능이 활성화됩니다)`
-    );
+    setCertModalAnimals(selectedItems);
   };
 
   // ── 농림부 보고 엑셀 다운로드 ─────────────────────────────────
@@ -386,6 +386,7 @@ const Dashboard: React.FC = () => {
   };
 
   return (
+    <>
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-7xl mx-auto">
         {/* 헤더 */}
@@ -693,6 +694,15 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
     </div>
+
+    {/* 등급판정서 일괄 출력 모달 */}
+    {certModalAnimals && (
+      <GradeCertificatePrintModal
+        animals={certModalAnimals}
+        onClose={() => setCertModalAnimals(null)}
+      />
+    )}
+    </>
   );
 };
 
