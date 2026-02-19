@@ -44,6 +44,18 @@ interface Props {
 
 // ── EKAPE 필드 한글 레이블 매핑 ───────────────────────────────────
 const FIELD_LABELS: Record<string, string> = {
+  // ── 1단계 issueNo 조회 실제 응답 필드 ─────────────────────────
+  animalNo:           '개체번호(이력번호)',
+  issueNo:            '확인서 발급번호',
+  issueDate:          '확인서 발급일',
+  abattCode:          '도축장 코드',
+  abattDate:          '도축일자',
+  abattNm:            '도축장명',
+  judgeDate:          '등급판정일',
+  judgeKindCd:        '판정종류 코드',
+  judgeKindNm:        '판정종류',
+  judgeSexNm:         '성별',
+  // ── 기존/추가 필드 ──────────────────────────────────────────
   issueDe:            '발급일자',
   butchYmd:           '도축일자',
   butchPlcNm:         '도축장명',
@@ -53,9 +65,10 @@ const FIELD_LABELS: Record<string, string> = {
   birthYmd:           '출생일',
   farmNm:             '농장명',
   farmAddr:           '농장주소',
-  // 등급 상세
+  // ── 2단계 cattle 상세 필드 ──────────────────────────────────
   gradeYmd:           '등급판정일',
   gradeName:          '최종 등급',
+  gradeNm:            '등급',
   qulGradeNm:         '육질등급',
   yieldGradeNm:       '육량등급',
   carcassWeight:      '도체중(kg)',
@@ -372,7 +385,23 @@ const CertCard: React.FC<{ cert: CertItem; index: number }> = ({ cert, index }) 
               )}
 
               {item.detailError && (
-                <p className="text-xs text-red-500 mt-2">⚠ 상세 조회 오류: {item.detailError}</p>
+                <div className="mt-3 p-2.5 bg-orange-50 border border-orange-200 rounded-lg text-xs">
+                  {item.detailError.includes('99') || item.detailError.includes('ACCESS DENIED') ? (
+                    <>
+                      <p className="font-semibold text-orange-700 mb-1">
+                        ⚠ 소도체 상세 정보 조회 권한 없음
+                      </p>
+                      <p className="text-orange-600">
+                        위 기본 정보(발급번호·도축일·판정일·성별)는 정상 조회되었습니다.
+                        소도체 등급 상세(근내지방도·도체중 등)를 보려면
+                        공공데이터포털에서 <strong>「축산물 소도체 등급판정 확인서」</strong> 서비스
+                        이용 승인이 필요합니다.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-red-600">상세 조회 오류: {item.detailError}</p>
+                  )}
+                </div>
               )}
             </div>
           );
