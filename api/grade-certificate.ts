@@ -1,39 +1,36 @@
 /**
- * Vercel 서버리스 함수: 축산물등급판정확인서 발급정보 조회
+ * Vercel 서버리스 함수: 축산물 등급판정 통합 조회
  *
  * 출처: 축산물품질평가원 (data.ekape.or.kr)
- * 공공데이터포털: https://www.data.go.kr/data/15057101/openapi.do
  *
  * 호출 흐름
- *  1단계: 이력번호(animalNo)  → 확인서발급번호(issueNo) 조회
- *  2단계: 확인서발급번호(issueNo) → 등급판정 상세정보 조회
+ *  1단계: 이력번호(animalNo) → 확인서발급번호(issueNo) 목록 조회
+ *  2단계: issueNo → 소도체 상세 조회 (/confirm/cattle)
+ *  3단계: 이력번호(animalNo) → 등급판정정보 직접 조회 (/animalGrade)  ← 신규
+ *         (2단계 권한 오류 시 대체 데이터로 활용)
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { XMLParser } from 'fast-xml-parser';
 
-const EKAPE_BASE = 'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm';
+const EKAPE_CONFIRM_BASE = 'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm';
+const EKAPE_GRADE_BASE   = 'http://data.ekape.or.kr/openapi-data/service/user/grade';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   parseAttributeValue: true,
-  // 숫자처럼 보이는 값도 문자열로 유지 (이력번호·발급번호 등의 앞자리 0 보존)
-  parseTagValue: false,
+  parseTagValue: false, // 앞자리 0 보존
 });
 
-// ── 헬퍼: 이력번호 정규화 (하이픈·공백 제거) ────────────────────────
+// ── 헬퍼 ────────────────────────────────────────────────────────────
 function normalizeAnimalNo(raw: string): string {
   return raw.replace(/[-\s]/g, '');
 }
 
-// ── 헬퍼: 공공데이터 API XML 응답을 파싱 후 items 배열 반환 ─────────
 interface EkapeResponse {
   response?: {
     header?: { resultCode?: string; resultMsg?: string };
-    body?: {
-      items?: { item?: unknown } | null;
-      totalCount?: string | number;
-    };
+    body?: { items?: { item?: unknown } | null };
   };
 }
 
@@ -49,17 +46,14 @@ function extractItems(xmlText: string): unknown[] {
   return Array.isArray(item) ? item : [item];
 }
 
-// ── 메인 핸들러 ──────────────────────────────────────────────────────
+// ── 메인 핸들러 ─────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS: 동일 Vercel 프로젝트 프론트에서만 호출하므로 같은 origin 허용
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   // ── 입력 검증 ──────────────────────────────────────────────────────
   const rawAnimalNo = req.query.animalNo;
@@ -74,16 +68,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // ── API 키 확인 ────────────────────────────────────────────────────
   const apiKey = process.env.EKAPE_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'EKAPE_API_KEY 환경변수가 설정되지 않았습니다.' });
   }
 
   try {
-    // ── 1단계: 이력번호 → 확인서발급번호(issueNo) 목록 조회 ──────────
+    // ── 1단계: 이력번호 → 확인서발급번호(issueNo) 조회 ───────────────
     const step1Url =
-      `${EKAPE_BASE}/issueNo` +
+      `${EKAPE_CONFIRM_BASE}/issueNo` +
       `?animalNo=${encodeURIComponent(animalNo)}` +
       `&serviceKey=${encodeURIComponent(apiKey)}`;
 
@@ -101,42 +94,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // ── 2단계: 발급번호별 소도체 상세 조회 (병렬) ───────────────────
-    const detailedItems = await Promise.all(
-      issueItems.map(async (issueItem) => {
-        const issueNo = String(issueItem.issueNo ?? '').trim();
-        if (!issueNo) return { ...issueItem, detail: [] };
+    // ── 2단계 & 3단계 병렬 실행 ──────────────────────────────────────
+    // 2단계: 확인서 발급번호별 소도체 상세 조회 (/confirm/cattle)
+    // 3단계: 이력번호 직접 등급판정정보 조회 (/animalGrade) — 신규 서비스
+    const [detailedItems, animalGradeItems] = await Promise.all([
 
-        const step2Url =
-          `${EKAPE_BASE}/cattle` +
-          `?issueNo=${encodeURIComponent(issueNo)}` +
+      // 2단계
+      Promise.all(
+        issueItems.map(async (issueItem) => {
+          const issueNo = String(issueItem.issueNo ?? '').trim();
+          if (!issueNo) return { ...issueItem, detail: [] };
+
+          const url =
+            `${EKAPE_CONFIRM_BASE}/cattle` +
+            `?issueNo=${encodeURIComponent(issueNo)}` +
+            `&serviceKey=${encodeURIComponent(apiKey)}`;
+
+          const fetchRes = await fetch(url);
+          if (!fetchRes.ok) {
+            return { ...issueItem, detail: [], detailError: `HTTP ${fetchRes.status}` };
+          }
+          const xml = await fetchRes.text();
+          try {
+            return { ...issueItem, detail: extractItems(xml) };
+          } catch (e) {
+            return {
+              ...issueItem,
+              detail: [],
+              detailError: e instanceof Error ? e.message : '상세 조회 실패',
+            };
+          }
+        })
+      ),
+
+      // 3단계: 축산물등급판정정보 서비스 — animalNo로 직접 조회
+      (async () => {
+        const url =
+          `${EKAPE_GRADE_BASE}/animalGrade` +
+          `?animalNo=${encodeURIComponent(animalNo)}` +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
-
-        const step2Res = await fetch(step2Url);
-        if (!step2Res.ok) {
-          return { ...issueItem, detail: [], detailError: `HTTP ${step2Res.status}` };
-        }
-
-        const step2Xml = await step2Res.text();
-        let detail: unknown[] = [];
         try {
-          detail = extractItems(step2Xml);
-        } catch (e) {
-          return {
-            ...issueItem,
-            detail: [],
-            detailError: e instanceof Error ? e.message : '상세 조회 실패',
-          };
+          const fetchRes = await fetch(url);
+          if (!fetchRes.ok) return [];
+          const xml = await fetchRes.text();
+          return extractItems(xml);
+        } catch {
+          return [];
         }
-
-        return { ...issueItem, detail };
-      })
-    );
+      })(),
+    ]);
 
     return res.status(200).json({
       animalNo,
       totalCount: detailedItems.length,
       items: detailedItems,
+      // 3단계 등급판정정보 (근내지방도·도체중·등급 등 상세)
+      gradeInfo: animalGradeItems,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 서버 오류';

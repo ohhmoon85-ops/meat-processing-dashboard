@@ -35,6 +35,7 @@ interface EkapeResult {
   animalNo: string;
   totalCount: number;
   items: EkapeIssueItem[];
+  gradeInfo?: EkapeDetail[]; // 3단계: 축산물등급판정정보 서비스 결과
 }
 
 interface Props {
@@ -406,6 +407,53 @@ const CertCard: React.FC<{ cert: CertItem; index: number }> = ({ cert, index }) 
             </div>
           );
         })
+      )}
+
+      {/* ── 3단계: 축산물등급판정정보 (gradeInfo) ── */}
+      {result.gradeInfo && result.gradeInfo.length > 0 && (
+        <div className="mt-4 pt-4 border-t">
+          <p className="text-xs font-semibold text-blue-600 mb-2 uppercase tracking-wider">
+            등급판정 상세정보
+          </p>
+          {result.gradeInfo.map((gi, gi_i) => {
+            // 등급 추출
+            const gradeVal = String(
+              gi.gradeName ?? gi.gradeNm ?? gi.qulGradeNm ?? ''
+            );
+            // 표시 필드 정렬
+            const allKeys = Object.keys(gi).filter(
+              (k) => gi[k] !== undefined && gi[k] !== ''
+            );
+            const orderedKeys = [
+              ...PREFERRED_ORDER.filter((k) => allKeys.includes(k)),
+              ...allKeys.filter((k) => !PREFERRED_ORDER.includes(k)),
+            ];
+            return (
+              <div key={gi_i} className={gi_i > 0 ? 'mt-3 pt-3 border-t border-dashed' : ''}>
+                {gradeVal && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-lg font-black px-3 py-1 rounded-lg border-2 ${gradeBadgeColor(gradeVal)}`}>
+                      {gradeVal}
+                    </span>
+                    <span className="text-xs text-gray-500">최종 등급</span>
+                  </div>
+                )}
+                <table className="w-full text-xs">
+                  <tbody>
+                    {orderedKeys.map((k) => (
+                      <tr key={k} className="border-b border-gray-50">
+                        <td className="py-1 pr-2 text-gray-400 whitespace-nowrap w-28">
+                          {FIELD_LABELS[k] ?? k}
+                        </td>
+                        <td className="py-1 font-medium text-gray-700">{String(gi[k])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
