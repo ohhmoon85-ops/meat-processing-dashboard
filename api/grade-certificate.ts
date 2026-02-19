@@ -97,7 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── 2단계 & 3단계 병렬 실행 ──────────────────────────────────────
     // 2단계: 확인서 발급번호별 소도체 상세 조회 (/confirm/cattle)
     // 3단계: 이력번호 직접 등급판정정보 조회 (/animalGrade) — 신규 서비스
-    const [detailedItems, animalGradeItems] = await Promise.all([
+    const [detailedItems, animalGradeResult] = await Promise.all([
 
       // 2단계
       Promise.all(
@@ -128,18 +128,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ),
 
       // 3단계: 축산물등급판정정보 서비스 — animalNo로 직접 조회
-      (async () => {
+      (async (): Promise<{ items: unknown[]; debug?: string }> => {
         const url =
           `${EKAPE_GRADE_BASE}/animalGrade` +
           `?animalNo=${encodeURIComponent(animalNo)}` +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
         try {
           const fetchRes = await fetch(url);
-          if (!fetchRes.ok) return [];
           const xml = await fetchRes.text();
-          return extractItems(xml);
-        } catch {
-          return [];
+          if (!fetchRes.ok) {
+            return { items: [], debug: `HTTP ${fetchRes.status}: ${xml.slice(0, 300)}` };
+          }
+          try {
+            return { items: extractItems(xml) };
+          } catch (e) {
+            return {
+              items: [],
+              debug: `parse error: ${e instanceof Error ? e.message : String(e)} | xml: ${xml.slice(0, 300)}`,
+            };
+          }
+        } catch (e) {
+          return { items: [], debug: `fetch error: ${e instanceof Error ? e.message : String(e)}` };
         }
       })(),
     ]);
@@ -149,7 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       totalCount: detailedItems.length,
       items: detailedItems,
       // 3단계 등급판정정보 (근내지방도·도체중·등급 등 상세)
-      gradeInfo: animalGradeItems,
+      gradeInfo: animalGradeResult.items,
+      gradeInfoDebug: animalGradeResult.debug ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 서버 오류';
