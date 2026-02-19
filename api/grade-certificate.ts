@@ -6,7 +6,7 @@
  * 호출 흐름
  *  1단계: 이력번호(animalNo) → 확인서발급번호(issueNo) 목록 조회
  *  2단계: issueNo → 소도체 상세 조회 (/confirm/cattle)
- *  3단계: 이력번호(animalNo) → 등급판정정보 직접 조회 (/animalGrade)  ← 신규
+ *  3단계: 이력번호(animalNo) → 등급판정정보 직접 조회 (/meatDetail)  ← 신규
  *         (2단계 권한 오류 시 대체 데이터로 활용)
  */
 
@@ -130,7 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // 3단계: 축산물등급판정정보 서비스 — animalNo로 직접 조회
       (async (): Promise<{ items: unknown[]; debug?: string }> => {
         const url =
-          `${EKAPE_GRADE_BASE}/animalGrade` +
+          `${EKAPE_GRADE_BASE}/meatDetail` +
           `?animalNo=${encodeURIComponent(animalNo)}` +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
         try {
