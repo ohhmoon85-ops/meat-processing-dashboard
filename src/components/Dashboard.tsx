@@ -177,7 +177,9 @@ const Dashboard: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const text = (e.target?.result as string) ?? '';
+        // EUC-KR(CP949) 디코딩 — 한국 바코드 장비 출력 파일 표준 인코딩
+        const buffer = e.target?.result as ArrayBuffer;
+        const text = new TextDecoder('euc-kr').decode(buffer);
         // BOM 제거 및 줄 분리 (CRLF / LF 모두 처리)
         const lines = text
           .replace(/^\uFEFF/, '')
@@ -251,7 +253,7 @@ const Dashboard: React.FC = () => {
         showMessage({ type: 'error', text: 'txt 파일을 읽는 중 오류가 발생했습니다.' });
       }
     };
-    reader.readAsText(file, 'utf-8');
+    reader.readAsArrayBuffer(file);
   };
 
   // ── 드롭된 파일 종류 판별 후 분기 처리 ───────────────────────
