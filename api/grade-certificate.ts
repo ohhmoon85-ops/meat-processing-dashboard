@@ -14,7 +14,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { XMLParser } from 'fast-xml-parser';
 
 const EKAPE_CONFIRM_BASE = 'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm';
-const EKAPE_GRADE_BASE   = 'http://data.ekape.or.kr/openapi-data/service/user/grade';
+const EKAPE_GRADE_BASE   = 'https://data.ekape.or.kr/openapi-data/service/user/grade';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
