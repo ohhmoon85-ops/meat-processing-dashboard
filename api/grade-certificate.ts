@@ -12,23 +12,9 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { XMLParser } from 'fast-xml-parser';
-import { request as httpsRequest } from 'node:https';
 
 const EKAPE_CONFIRM_BASE = 'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm';
-const EKAPE_GRADE_BASE   = 'https://data.ekape.or.kr/openapi-data/service/user/grade';
-
-// EKAPE HTTPS 서버는 한국 CA 인증서를 사용하므로 SSL 검증 우회
-function fetchEkapeHttps(url: string): Promise<{ status: number; text: string }> {
-  return new Promise((resolve, reject) => {
-    const req = httpsRequest(url, { rejectUnauthorized: false }, (res) => {
-      let data = '';
-      res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, text: data }));
-    });
-    req.on('error', reject);
-    req.end();
-  });
-}
+const EKAPE_GRADE_BASE   = 'http://data.ekape.or.kr/openapi-data/service/user/grade';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -148,20 +134,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `?animalNo=${encodeURIComponent(animalNo)}` +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
         try {
-          const { status, text: xml } = await fetchEkapeHttps(url);
-          if (status < 200 || status >= 300) {
-            return { items: [], debug: `HTTP ${status}: ${xml.slice(0, 300)}` };
+          const fetchRes = await fetch(url);
+          const xml = await fetchRes.text();
+          if (!fetchRes.ok) {
+            return { items: [], debug: `HTTP ${fetchRes.status}: ${xml.slice(0, 300)}` };
           }
           try {
             return { items: extractItems(xml) };
           } catch (e) {
-            return {
-              items: [],
-              debug: `parse error: ${e instanceof Error ? e.message : String(e)} | xml: ${xml.slice(0, 300)}`,
-            };
+            return { items: [], debug: `parse: ${e instanceof Error ? e.message : String(e)} | ${xml.slice(0, 300)}` };
           }
         } catch (e) {
-          return { items: [], debug: `fetch error: ${e instanceof Error ? e.message : String(e)}` };
+          return { items: [], debug: `fetch: ${e instanceof Error ? e.message : String(e)}` };
         }
       })(),
     ]);
