@@ -12,9 +12,23 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { XMLParser } from 'fast-xml-parser';
+import { request as httpsRequest } from 'node:https';
 
 const EKAPE_CONFIRM_BASE = 'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm';
-const EKAPE_GRADE_BASE   = 'http://data.ekape.or.kr/openapi-data/service/user/animalGrade';
+const EKAPE_GRADE_BASE   = 'https://data.ekape.or.kr/openapi-data/service/user/grade';
+
+// EKAPE HTTPS 서버는 한국 CA 인증서를 사용하므로 SSL 검증 우회
+function fetchEkapeHttps(url: string): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const req = httpsRequest(url, { rejectUnauthorized: false }, (res) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, text: data }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -127,17 +141,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       ),
 
-      // 3단계: 축산물등급판정정보 서비스 — animalNo로 직접 조회
+      // 3단계: 축산물등급판정정보 서비스 — animalNo로 직접 조회 (HTTPS + SSL우회)
       (async (): Promise<{ items: unknown[]; debug?: string }> => {
         const url =
           `${EKAPE_GRADE_BASE}/meatDetail` +
           `?animalNo=${encodeURIComponent(animalNo)}` +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
         try {
-          const fetchRes = await fetch(url);
-          const xml = await fetchRes.text();
-          if (!fetchRes.ok) {
-            return { items: [], debug: `HTTP ${fetchRes.status}: ${xml.slice(0, 300)}` };
+          const { status, text: xml } = await fetchEkapeHttps(url);
+          if (status < 200 || status >= 300) {
+            return { items: [], debug: `HTTP ${status}: ${xml.slice(0, 300)}` };
           }
           try {
             return { items: extractItems(xml) };
