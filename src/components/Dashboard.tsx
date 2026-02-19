@@ -170,6 +170,90 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // ── .txt 라벨 파일 파싱 (바코드 스캐너 출력 형식) ────────────────
+  // 형식: YYYYMMDD|품목명[부위명]|납품처|용도|중량kg|이력번호1  (줄1)
+  //       이력번호2|회사명                                     (줄2)
+  const processTxtFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = (e.target?.result as string) ?? '';
+        // BOM 제거 및 줄 분리 (CRLF / LF 모두 처리)
+        const lines = text
+          .replace(/^\uFEFF/, '')
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0);
+
+        if (lines.length === 0) {
+          showMessage({ type: 'error', text: 'txt 파일에 데이터가 없습니다.' });
+          return;
+        }
+
+        const items: Omit<AnimalData, 'id' | 'selected'>[] = [];
+
+        // 2줄씩 묶어 파싱 (홀수 남은 줄은 단독 처리)
+        let i = 0;
+        while (i < lines.length) {
+          const line1 = lines[i];
+          const line2 = i + 1 < lines.length ? lines[i + 1] : '';
+
+          const parts1 = line1.split('|');
+          const parts2 = line2.split('|');
+
+          // 첫 줄이 날짜(8자리)로 시작하는지 확인
+          const isRecord = /^\d{8}$/.test(parts1[0]?.trim());
+          if (!isRecord) { i++; continue; }
+
+          // ── 필드 파싱 ────────────────────────────────────────────
+          const rawDate = parts1[0]?.trim() ?? '';
+          const productPart = parts1[1]?.trim() ?? '';
+          const rawWeight = parts1[4]?.trim() ?? '';
+          const traceNo1 = parts1[5]?.trim() ?? '';
+          const traceNo2 = parts2[0]?.trim() ?? '';
+
+          // 날짜: YYYYMMDD → YYYY-MM-DD
+          const productionDate =
+            rawDate.length === 8
+              ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+              : rawDate;
+
+          // 품목명[부위명] 분리
+          const productMatch = productPart.match(/^(.+?)\[(.+?)\]$/);
+          const productName = productMatch ? productMatch[1].trim() : productPart;
+          const partName = productMatch ? productMatch[2].trim() : '-';
+
+          // 중량: "15kg" → "15"
+          const weight = rawWeight.replace(/kg$/i, '');
+
+          // breed 필드에 품목/부위/중량 요약 표시
+          const breedLabel = `${productName} / ${partName} (${weight}kg)`;
+
+          // 이력번호 1 추가
+          if (traceNo1) {
+            items.push({ animalNumber: traceNo1, breed: breedLabel, birthDate: productionDate });
+          }
+          // 이력번호 2 추가 (두 번째 줄에서 읽은 것이 유효한 이력번호 형식일 때)
+          if (traceNo2 && /^[A-Z]\d{10,}/.test(traceNo2)) {
+            items.push({ animalNumber: traceNo2, breed: breedLabel, birthDate: productionDate });
+          }
+
+          // 2줄짜리 레코드면 2칸 전진, 아니면 1칸
+          i += traceNo2 && /^[A-Z]\d{10,}/.test(traceNo2) ? 2 : 1;
+        }
+
+        if (items.length === 0) {
+          showMessage({ type: 'error', text: 'txt 파일에서 이력번호를 찾을 수 없습니다.' });
+        } else {
+          addAnimals(items);
+        }
+      } catch {
+        showMessage({ type: 'error', text: 'txt 파일을 읽는 중 오류가 발생했습니다.' });
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
   // ── 드롭된 파일 종류 판별 후 분기 처리 ───────────────────────
   const processDroppedFile = (file: File) => {
     const isImage = /\.(jpe?g|png|bmp|gif|webp|tiff?)$/i.test(file.name) || file.type.startsWith('image/');
@@ -178,13 +262,16 @@ const Dashboard: React.FC = () => {
       'application/vnd.ms-excel',
       'text/csv',
     ].includes(file.type);
+    const isTxt = /\.txt$/i.test(file.name) || file.type === 'text/plain';
 
     if (isImage) {
       void processImageFile(file);
     } else if (isExcel) {
       processExcelFile(file);
+    } else if (isTxt) {
+      processTxtFile(file);
     } else {
-      showMessage({ type: 'error', text: '엑셀(.xlsx/.xls/.csv) 또는 이미지 파일만 지원합니다.' });
+      showMessage({ type: 'error', text: '엑셀(.xlsx/.csv), 이미지, 또는 txt 파일만 지원합니다.' });
     }
   };
 
@@ -344,22 +431,27 @@ const Dashboard: React.FC = () => {
                     {isDragOver ? '여기에 놓으세요' : '파일을 드래그하거나 클릭하여 선택'}
                   </span>
                   {/* 지원 파일 유형 안내 */}
-                  <div className="flex items-center gap-3 mt-0.5">
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap justify-center">
                     <span className="flex items-center gap-1 text-xs text-gray-400">
                       <Upload className="w-3 h-3" />
-                      엑셀 .xlsx / .xls / .csv
+                      엑셀 .xlsx / .csv
                     </span>
                     <span className="text-gray-300">|</span>
                     <span className="flex items-center gap-1 text-xs text-gray-400">
                       <ImageIcon className="w-3 h-3" />
                       바코드 이미지 .jpg / .png
                     </span>
+                    <span className="text-gray-300">|</span>
+                    <span className="flex items-center gap-1 text-xs text-blue-500 font-medium">
+                      <FileText className="w-3 h-3" />
+                      라벨 데이터 .txt
+                    </span>
                   </div>
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".xlsx,.xls,.csv,image/*"
+                  accept=".xlsx,.xls,.csv,.txt,image/*"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
