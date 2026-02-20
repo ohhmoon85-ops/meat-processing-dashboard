@@ -120,10 +120,12 @@ export default async function handler(req: Request): Promise<Response> {
           return { issueNo: '', items: [] as unknown[], debug: 'issueNo 없음' };
         }
 
-        // issueNo + serviceKey (issueDate 없이 — HTTP 서버 호환)
+        // issueNo + issueDate + serviceKey (오퍼레이션 11: 발급번호와 발급일자 필수)
+        const issueDate = String(issueItem.issueDate ?? '').trim();
         const url =
           `${cattleEndpoint}` +
           `?issueNo=${encodeURIComponent(issueNo)}` +
+          (issueDate ? `&issueDate=${encodeURIComponent(issueDate)}` : '') +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
 
         // Promise.race로 8초 타임아웃 (AbortController가 Edge Runtime에서 미지원)
