@@ -1,27 +1,39 @@
 /**
  * Vercel Edge Function: 축산물 등급판정 통합 조회
- * Edge runtime → Cloudflare 한국 엣지 노드를 통해 EKAPE HTTPS 접근 가능
+ * Edge runtime → Cloudflare 한국 엣지 노드 경유
  *
  * 호출 흐름
  *  1단계: 이력번호(animalNo) → 확인서발급번호(issueNo) 목록 조회
- *  2단계: issueNo → 소도체 상세 조회 (/confirm/cattle)
- *  3단계: 이력번호(animalNo) → 등급판정정보 직접 조회 (/meatDetail)
+ *  2단계: issueNo + issueDate → 축산물등급판정정보 상세 조회
+ *
+ * 공공데이터포털 서비스정보
+ *  End Point : https://data.ekape.or.kr/openapi-data/service/user/grade
+ *  참고문서   : 축산물품질평가원 OpenAPI활용가이드 축산물등급판정정보 20260121.docx
  */
 
 import { XMLParser } from 'fast-xml-parser';
 
 export const config = { runtime: 'edge' };
 
-const EKAPE_CONFIRM_BASE = 'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm';
-const EKAPE_GRADE_BASE   = 'https://data.ekape.or.kr/openapi-data/service/user/grade';
+// ── 엔드포인트 ─────────────────────────────────────────────────────
+// 1단계: 확인서발급번호 목록 (기존 작동 확인된 경로)
+const ISSUE_NO_URL =
+  'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/issueNo';
 
+// 2단계: 등급판정 상세 (공공데이터포털 ENDPOINT 환경변수 또는 HTTPS 공식 엔드포인트)
+//   Vercel 환경변수 ENDPOINT = http://data.ekape.or.kr/.../confirm/cattle 를 우선 사용
+//   미설정 시 공식 HTTPS 엔드포인트 사용
+const CATTLE_URL =
+  'https://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
+
+// ── XML 파서 ───────────────────────────────────────────────────────
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   parseAttributeValue: true,
   parseTagValue: false,
 });
 
-// ── 헬퍼 ────────────────────────────────────────────────────────────
+// ── 헬퍼 ──────────────────────────────────────────────────────────
 function normalizeAnimalNo(raw: string): string {
   return raw.replace(/[-\s]/g, '');
 }
@@ -56,12 +68,12 @@ function jsonRes(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: CORS_HEADERS });
 }
 
-// ── 메인 핸들러 ─────────────────────────────────────────────────────
+// ── 메인 핸들러 ───────────────────────────────────────────────────
 export default async function handler(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { status: 200, headers: CORS_HEADERS });
   if (req.method !== 'GET') return jsonRes({ error: 'Method not allowed' }, 405);
 
-  // ── 입력 검증 ──────────────────────────────────────────────────────
+  // ── 입력 검증 ────────────────────────────────────────────────────
   const { searchParams } = new URL(req.url);
   const rawAnimalNo = searchParams.get('animalNo');
   if (!rawAnimalNo) {
@@ -69,7 +81,10 @@ export default async function handler(req: Request): Promise<Response> {
   }
   const animalNo = normalizeAnimalNo(rawAnimalNo);
   if (!/^\d{12}$/.test(animalNo)) {
-    return jsonRes({ error: '이력번호는 하이픈을 제외한 12자리 숫자여야 합니다.', received: animalNo }, 400);
+    return jsonRes({
+      error: '이력번호는 하이픈을 제외한 12자리 숫자여야 합니다.',
+      received: animalNo,
+    }, 400);
   }
 
   const apiKey = process.env.EKAPE_API_KEY;
@@ -77,10 +92,13 @@ export default async function handler(req: Request): Promise<Response> {
     return jsonRes({ error: 'EKAPE_API_KEY 환경변수가 설정되지 않았습니다.' }, 500);
   }
 
+  // docx 문서 기준: HTTP 사용 (ENDPOINT 환경변수가 있어도 HTTP 강제)
+  const cattleEndpoint = CATTLE_URL;  // http://data.ekape.or.kr/.../confirm/cattle
+
   try {
-    // ── 1단계: 이력번호 → 확인서발급번호(issueNo) 조회 ───────────────
+    // ── 1단계: 이력번호 → 확인서발급번호(issueNo) 목록 ───────────────
     const step1Url =
-      `${EKAPE_CONFIRM_BASE}/issueNo` +
+      `${ISSUE_NO_URL}` +
       `?animalNo=${encodeURIComponent(animalNo)}` +
       `&serviceKey=${encodeURIComponent(apiKey)}`;
 
@@ -89,72 +107,90 @@ export default async function handler(req: Request): Promise<Response> {
       return jsonRes({ error: `1단계 API 요청 실패 (HTTP ${step1Res.status})` }, 502);
     }
     const step1Xml = await step1Res.text();
-    const issueItems = extractItems(step1Xml) as Array<Record<string, string>>;
+    const issueItems = extractItems(step1Xml) as Array<Record<string, unknown>>;
 
     if (issueItems.length === 0) {
       return jsonRes({ error: '해당 이력번호의 등급판정 기록이 없습니다.', animalNo }, 404);
     }
 
-    // ── 2단계 & 3단계 병렬 실행 ──────────────────────────────────────
-    const [detailedItems, animalGradeResult] = await Promise.all([
+    // ── 2단계: 발급번호별 등급판정 상세 조회 ─────────────────────────
+    const gradeResults = await Promise.all(
+      issueItems.map(async (issueItem) => {
+        const issueNo   = String(issueItem.issueNo   ?? '').trim();
+        const issueDate = String(issueItem.issueDate ?? '').trim();
 
-      // 2단계: 확인서 발급번호별 소도체 상세 조회
-      Promise.all(
-        issueItems.map(async (issueItem) => {
-          const issueNo = String(issueItem.issueNo ?? '').trim();
-          if (!issueNo) return { ...issueItem, detail: [] };
-
-          const url =
-            `${EKAPE_CONFIRM_BASE}/cattle` +
-            `?issueNo=${encodeURIComponent(issueNo)}` +
-            `&serviceKey=${encodeURIComponent(apiKey)}`;
-
-          const fetchRes = await fetch(url);
-          if (!fetchRes.ok) {
-            return { ...issueItem, detail: [], detailError: `HTTP ${fetchRes.status}` };
-          }
-          const xml = await fetchRes.text();
-          try {
-            return { ...issueItem, detail: extractItems(xml) };
-          } catch (e) {
-            return {
-              ...issueItem,
-              detail: [],
-              detailError: e instanceof Error ? e.message : '상세 조회 실패',
-            };
-          }
-        })
-      ),
-
-      // 3단계: 축산물등급판정정보 — HTTPS (Edge 한국 노드 경유)
-      (async (): Promise<{ items: unknown[]; debug?: string }> => {
-        const url =
-          `${EKAPE_GRADE_BASE}/meatDetail` +
-          `?animalNo=${encodeURIComponent(animalNo)}` +
-          `&serviceKey=${encodeURIComponent(apiKey)}`;
-        try {
-          const fetchRes = await fetch(url);
-          const xml = await fetchRes.text();
-          if (!fetchRes.ok) {
-            return { items: [], debug: `HTTP ${fetchRes.status}: ${xml.slice(0, 300)}` };
-          }
-          try {
-            return { items: extractItems(xml) };
-          } catch (e) {
-            return { items: [], debug: `parse: ${e instanceof Error ? e.message : String(e)} | ${xml.slice(0, 300)}` };
-          }
-        } catch (e) {
-          return { items: [], debug: `fetch: ${e instanceof Error ? e.message : String(e)}` };
+        if (!issueNo) {
+          return { issueNo: '', items: [] as unknown[], debug: 'issueNo 없음' };
         }
-      })(),
-    ]);
+
+        // 요청 URL 구성 (docx 예시: issueNo 먼저)
+        let url =
+          `${cattleEndpoint}` +
+          `?issueNo=${encodeURIComponent(issueNo)}` +
+          `&serviceKey=${encodeURIComponent(apiKey)}`;
+        if (issueDate) url += `&issueDate=${encodeURIComponent(issueDate)}`;
+
+        // EKAPE 서버가 브라우저 헤더 없으면 연결을 차단하는 경우 대비
+        const fetchOptions: RequestInit = {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/xml, text/xml, */*;q=0.8',
+            'Accept-Language': 'ko-KR,ko;q=0.9',
+            'Connection': 'close',
+          },
+        };
+
+        // 최대 3회 재시도 (서버 부하 분산 또는 일시적 오류 대비)
+        let lastErr = '';
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const fetchRes = await fetch(url, fetchOptions);
+            const xml = await fetchRes.text();
+
+            if (!fetchRes.ok) {
+              return {
+                issueNo,
+                items: [] as unknown[],
+                debug: `HTTP ${fetchRes.status} (attempt ${attempt}): ${xml.slice(0, 300)}`,
+              };
+            }
+
+            try {
+              return { issueNo, items: extractItems(xml), debug: undefined };
+            } catch (e) {
+              return {
+                issueNo,
+                items: [] as unknown[],
+                debug: `parse (attempt ${attempt}): ${e instanceof Error ? e.message : String(e)} | xml: ${xml.slice(0, 300)}`,
+              };
+            }
+          } catch (e) {
+            lastErr = e instanceof Error ? e.message : String(e);
+            if (attempt < 3) {
+              await new Promise((r) => setTimeout(r, 800 * attempt));
+            }
+          }
+        }
+        return {
+          issueNo,
+          items: [] as unknown[],
+          debug: `fetch failed (3 attempts): ${lastErr} | url: ${url}`,
+        };
+      })
+    );
+
+    const gradeInfo = gradeResults.flatMap((r) => r.items);
+    const debugMsgs = gradeResults
+      .filter((r) => r.debug)
+      .map((r) => `[${r.issueNo}] ${r.debug}`);
 
     return jsonRes({
       animalNo,
-      totalCount: detailedItems.length,
-      items: detailedItems,
-      gradeInfo: animalGradeResult.items,
-      gradeInfoDebug: animalGradeResult.debug ?? null,
+      totalCount: issueItems.length,
+      items: issueItems,
+      gradeInfo,
+      gradeInfoDebug: debugMsgs.length > 0 ? debugMsgs.join(' || ') : null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : '알 수 없는 서버 오류';
