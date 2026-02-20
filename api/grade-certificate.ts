@@ -120,7 +120,11 @@ export default async function handler(req: Request): Promise<Response> {
           return { issueNo: '', items: [] as unknown[], debug: 'issueNo 없음' };
         }
 
-        const issueDate = String(issueItem.issueDate ?? '').trim();
+        const rawDate = String(issueItem.issueDate ?? '').trim();
+        // YYYYMMDD → YYYY-MM-DD 변환 (오퍼레이션 11 샘플 형식: 2013-01-10)
+        const issueDate = /^\d{8}$/.test(rawDate)
+          ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+          : rawDate;
         const params = new URLSearchParams({ issueNo, serviceKey: apiKey });
         if (issueDate) params.set('issueDate', issueDate);
         const proxyUrl = `${origin}${CATTLE_PROXY}?${params.toString()}`;
