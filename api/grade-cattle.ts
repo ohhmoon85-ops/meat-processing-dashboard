@@ -84,19 +84,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const params = new URLSearchParams({ issueNo, serviceKey });
   if (issueDate) params.set('issueDate', issueDate);
 
-  const errors: string[] = [];
+  const results: Array<{ path: string; error?: string; rawXml?: string }> = [];
 
   for (const path of CATTLE_PATHS) {
     const url = `${BASE}${path}?${params.toString()}`;
     try {
       const xml = await httpGet(url);
-      const { items } = tryExtractItems(xml);
-      return res.status(200).json({ items, path });
+      try {
+        const { items } = tryExtractItems(xml);
+        return res.status(200).json({ items, path });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        // rawXml 앞 500자 포함 → 어떤 응답인지 진단
+        results.push({ path, error: msg, rawXml: xml.slice(0, 500) });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`${path}: ${msg}`);
+      results.push({ path, error: msg });
     }
   }
 
-  return res.status(502).json({ error: errors.join(' | '), tried: CATTLE_PATHS });
+  return res.status(502).json({ results });
 }
