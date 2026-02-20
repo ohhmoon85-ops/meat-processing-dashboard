@@ -20,11 +20,9 @@ export const config = { runtime: 'edge' };
 const ISSUE_NO_URL =
   'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/issueNo';
 
-// 2단계: 등급판정 상세 (공공데이터포털 ENDPOINT 환경변수 또는 HTTPS 공식 엔드포인트)
-//   Vercel 환경변수 ENDPOINT = http://data.ekape.or.kr/.../confirm/cattle 를 우선 사용
-//   미설정 시 공식 HTTPS 엔드포인트 사용
+// 2단계: 등급판정 상세 — HTTP 사용 (HTTPS는 응답 없이 타임아웃 발생)
 const CATTLE_URL =
-  'https://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
+  'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
 
 // ── XML 파서 ───────────────────────────────────────────────────────
 const xmlParser = new XMLParser({
@@ -116,19 +114,17 @@ export default async function handler(req: Request): Promise<Response> {
     // ── 2단계: 발급번호별 등급판정 상세 조회 ─────────────────────────
     const gradeResults = await Promise.all(
       issueItems.map(async (issueItem) => {
-        const issueNo   = String(issueItem.issueNo   ?? '').trim();
-        const issueDate = String(issueItem.issueDate ?? '').trim();
+        const issueNo = String(issueItem.issueNo ?? '').trim();
 
         if (!issueNo) {
           return { issueNo: '', items: [] as unknown[], debug: 'issueNo 없음' };
         }
 
-        // 요청 URL 구성 (docx 예시: issueNo 먼저)
-        let url =
+        // issueNo + serviceKey (issueDate 없이 — HTTP 서버 호환)
+        const url =
           `${cattleEndpoint}` +
           `?issueNo=${encodeURIComponent(issueNo)}` +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
-        if (issueDate) url += `&issueDate=${encodeURIComponent(issueDate)}`;
 
         // Promise.race로 8초 타임아웃 (AbortController가 Edge Runtime에서 미지원)
         try {
