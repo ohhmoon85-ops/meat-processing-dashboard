@@ -20,9 +20,9 @@ export const config = { runtime: 'edge' };
 const ISSUE_NO_URL =
   'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/issueNo';
 
-// 2단계: 등급판정 상세 — HTTP 사용 (HTTPS는 응답 없이 타임아웃 발생)
+// 2단계: 등급판정 상세 — HTTPS 사용 (공식 End Point가 https, HTTP는 ACCESS DENIED 반환)
 const CATTLE_URL =
-  'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
+  'https://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
 
 // ── XML 파서 ───────────────────────────────────────────────────────
 const xmlParser = new XMLParser({
@@ -90,8 +90,7 @@ export default async function handler(req: Request): Promise<Response> {
     return jsonRes({ error: 'EKAPE_API_KEY 환경변수가 설정되지 않았습니다.' }, 500);
   }
 
-  // docx 문서 기준: HTTP 사용 (ENDPOINT 환경변수가 있어도 HTTP 강제)
-  const cattleEndpoint = CATTLE_URL;  // http://data.ekape.or.kr/.../confirm/cattle
+  const cattleEndpoint = CATTLE_URL;  // https://data.ekape.or.kr/.../confirm/cattle
 
   try {
     // ── 1단계: 이력번호 → 확인서발급번호(issueNo) 목록 ───────────────
@@ -128,12 +127,12 @@ export default async function handler(req: Request): Promise<Response> {
           (issueDate ? `&issueDate=${encodeURIComponent(issueDate)}` : '') +
           `&serviceKey=${encodeURIComponent(apiKey)}`;
 
-        // Promise.race로 8초 타임아웃 (AbortController가 Edge Runtime에서 미지원)
+        // Promise.race로 18초 타임아웃 (AbortController가 Edge Runtime에서 미지원)
         try {
           const fetchRes = await Promise.race([
             fetch(url),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('timeout_8s')), 8000)
+              setTimeout(() => reject(new Error('timeout_18s')), 18000)
             ),
           ]);
           const xml = await fetchRes.text();
