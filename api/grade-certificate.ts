@@ -130,13 +130,14 @@ export default async function handler(req: Request): Promise<Response> {
           `&serviceKey=${encodeURIComponent(apiKey)}`;
         if (issueDate) url += `&issueDate=${encodeURIComponent(issueDate)}`;
 
-        // 8초 타임아웃 (fetch가 무한 대기하면 Edge Function 전체 타임아웃 방지)
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 8000);
-
+        // Promise.race로 8초 타임아웃 (AbortController가 Edge Runtime에서 미지원)
         try {
-          const fetchRes = await fetch(url, { signal: controller.signal });
-          clearTimeout(timer);
+          const fetchRes = await Promise.race([
+            fetch(url),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('timeout_8s')), 8000)
+            ),
+          ]);
           const xml = await fetchRes.text();
 
           if (!fetchRes.ok) {
@@ -157,7 +158,6 @@ export default async function handler(req: Request): Promise<Response> {
             };
           }
         } catch (e) {
-          clearTimeout(timer);
           const msg = e instanceof Error ? e.message : String(e);
           return {
             issueNo,
