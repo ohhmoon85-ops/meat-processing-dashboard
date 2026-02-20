@@ -1,19 +1,27 @@
 /**
  * Vercel Node.js Serverless Function: EKAPE 소 등급판정 확인서 상세 조회
- * 리전: icn1 (Seoul) — 한국 EKAPE 서버와 낮은 지연
+ * 리전: icn1 (Seoul)
  *
- * Edge Runtime은 EKAPE HTTPS 인증서를 신뢰하지 않아 "internal error" 발생.
- * Node.js + rejectUnauthorized:false 로 TLS 검증 우회.
+ * 시도 순서:
+ *  1) HTTP /grade/confirm/cattle  (기존 경로, Edge에서 ACCESS DENIED 반환)
+ *  2) HTTP /grade/cattle          (확인서 발급정보 서비스의 대안 경로)
+ *
+ * EKAPE HTTPS는 외부 서버에서 TCP 타임아웃 → HTTP만 사용
  *
  * GET /api/grade-cattle?issueNo=XXXX&issueDate=YYYYMMDD&serviceKey=XXXX
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import https from 'node:https';
+import http from 'node:http';
 import { XMLParser } from 'fast-xml-parser';
 
-const CATTLE_URL =
-  'https://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
+const BASE = 'http://data.ekape.or.kr/openapi-data/service/user/grade';
+
+// 시도할 경로 순서
+const CATTLE_PATHS = [
+  '/confirm/cattle',  // 기존 경로
+  '/cattle',          // 확인서 발급정보 서비스 대안 경로
+];
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -28,31 +36,31 @@ interface EkapeResponse {
   };
 }
 
-function extractItems(xmlText: string): unknown[] {
-  const parsed = xmlParser.parse(xmlText) as EkapeResponse;
-  const resultCode = parsed?.response?.header?.resultCode;
-  if (resultCode !== '00' && resultCode !== '0') {
-    const msg = parsed?.response?.header?.resultMsg ?? '알 수 없는 오류';
-    throw new Error(`API 오류 [${resultCode}]: ${msg}`);
-  }
-  const item = parsed?.response?.body?.items?.item;
-  if (!item) return [];
-  return Array.isArray(item) ? item : [item];
-}
-
-function httpsGet(url: string): Promise<string> {
+function httpGet(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { rejectUnauthorized: false }, (res) => {
+    const req = http.get(url, (res) => {
       const chunks: Buffer[] = [];
       res.on('data', (chunk: Buffer) => chunks.push(chunk));
       res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
       res.on('error', reject);
     });
     req.on('error', reject);
-    req.setTimeout(15000, () => {
-      req.destroy(new Error('timeout_15s'));
+    req.setTimeout(10000, () => {
+      req.destroy(new Error('timeout_10s'));
     });
   });
+}
+
+function tryExtractItems(xmlText: string): { items: unknown[]; resultCode: string } {
+  const parsed = xmlParser.parse(xmlText) as EkapeResponse;
+  const resultCode = String(parsed?.response?.header?.resultCode ?? '');
+  if (resultCode !== '00' && resultCode !== '0') {
+    const msg = parsed?.response?.header?.resultMsg ?? '알 수 없는 오류';
+    throw new Error(`API 오류 [${resultCode}]: ${msg}`);
+  }
+  const item = parsed?.response?.body?.items?.item;
+  const items = !item ? [] : Array.isArray(item) ? item : [item];
+  return { items, resultCode };
 }
 
 function setCors(res: VercelResponse) {
@@ -65,8 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const issueNo  = String(req.query.issueNo  ?? '');
-  const issueDate = String(req.query.issueDate ?? '');
+  const issueNo   = String(req.query.issueNo   ?? '');
+  const issueDate = String(req.query.issueDate  ?? '');
   const serviceKey = String(req.query.serviceKey ?? '');
 
   if (!issueNo || !serviceKey) {
@@ -75,14 +83,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const params = new URLSearchParams({ issueNo, serviceKey });
   if (issueDate) params.set('issueDate', issueDate);
-  const url = `${CATTLE_URL}?${params.toString()}`;
 
-  try {
-    const xml = await httpsGet(url);
-    const items = extractItems(xml);
-    return res.status(200).json({ items });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return res.status(502).json({ error: msg, url });
+  const errors: string[] = [];
+
+  for (const path of CATTLE_PATHS) {
+    const url = `${BASE}${path}?${params.toString()}`;
+    try {
+      const xml = await httpGet(url);
+      const { items } = tryExtractItems(xml);
+      return res.status(200).json({ items, path });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${path}: ${msg}`);
+    }
   }
+
+  return res.status(502).json({ error: errors.join(' | '), tried: CATTLE_PATHS });
 }
