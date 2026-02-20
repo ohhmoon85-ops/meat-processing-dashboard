@@ -20,9 +20,9 @@ export const config = { runtime: 'edge' };
 const ISSUE_NO_URL =
   'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/issueNo';
 
-// 2단계: 등급판정 상세 — HTTPS 사용 (공식 End Point가 https, HTTP는 ACCESS DENIED 반환)
-const CATTLE_URL =
-  'https://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
+// 2단계: /api/grade-cattle 프록시 경유 (Node.js icn1 Seoul → EKAPE HTTPS)
+// Edge Runtime은 EKAPE HTTPS 인증서 TLS 오류 → Node.js rejectUnauthorized:false 우회
+const CATTLE_PROXY = '/api/grade-cattle';
 
 // ── XML 파서 ───────────────────────────────────────────────────────
 const xmlParser = new XMLParser({
@@ -90,7 +90,8 @@ export default async function handler(req: Request): Promise<Response> {
     return jsonRes({ error: 'EKAPE_API_KEY 환경변수가 설정되지 않았습니다.' }, 500);
   }
 
-  const cattleEndpoint = CATTLE_URL;  // https://data.ekape.or.kr/.../confirm/cattle
+  // 2단계 프록시 URL: 현재 요청의 origin + /api/grade-cattle
+  const origin = new URL(req.url).origin;
 
   try {
     // ── 1단계: 이력번호 → 확인서발급번호(issueNo) 목록 ───────────────
@@ -110,7 +111,7 @@ export default async function handler(req: Request): Promise<Response> {
       return jsonRes({ error: '해당 이력번호의 등급판정 기록이 없습니다.', animalNo }, 404);
     }
 
-    // ── 2단계: 발급번호별 등급판정 상세 조회 ─────────────────────────
+    // ── 2단계: /api/grade-cattle 프록시 경유 등급판정 상세 조회 ───────
     const gradeResults = await Promise.all(
       issueItems.map(async (issueItem) => {
         const issueNo = String(issueItem.issueNo ?? '').trim();
@@ -119,48 +120,32 @@ export default async function handler(req: Request): Promise<Response> {
           return { issueNo: '', items: [] as unknown[], debug: 'issueNo 없음' };
         }
 
-        // issueNo + issueDate + serviceKey (오퍼레이션 11: 발급번호와 발급일자 필수)
         const issueDate = String(issueItem.issueDate ?? '').trim();
-        const url =
-          `${cattleEndpoint}` +
-          `?issueNo=${encodeURIComponent(issueNo)}` +
-          (issueDate ? `&issueDate=${encodeURIComponent(issueDate)}` : '') +
-          `&serviceKey=${encodeURIComponent(apiKey)}`;
+        const params = new URLSearchParams({ issueNo, serviceKey: apiKey });
+        if (issueDate) params.set('issueDate', issueDate);
+        const proxyUrl = `${origin}${CATTLE_PROXY}?${params.toString()}`;
 
-        // Promise.race로 18초 타임아웃 (AbortController가 Edge Runtime에서 미지원)
         try {
           const fetchRes = await Promise.race([
-            fetch(url),
+            fetch(proxyUrl),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('timeout_18s')), 18000)
+              setTimeout(() => reject(new Error('timeout_20s')), 20000)
             ),
           ]);
-          const xml = await fetchRes.text();
+          const json = await fetchRes.json() as { items?: unknown[]; error?: string };
 
-          if (!fetchRes.ok) {
+          if (!fetchRes.ok || json.error) {
             return {
               issueNo,
               items: [] as unknown[],
-              debug: `HTTP ${fetchRes.status}: ${xml.slice(0, 300)}`,
+              debug: `proxy ${fetchRes.status}: ${json.error ?? ''}`,
             };
           }
 
-          try {
-            return { issueNo, items: extractItems(xml), debug: undefined };
-          } catch (e) {
-            return {
-              issueNo,
-              items: [] as unknown[],
-              debug: `parse: ${e instanceof Error ? e.message : String(e)} | xml: ${xml.slice(0, 300)}`,
-            };
-          }
+          return { issueNo, items: json.items ?? [], debug: undefined };
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          return {
-            issueNo,
-            items: [] as unknown[],
-            debug: `fetch: ${msg} | url: ${url}`,
-          };
+          return { issueNo, items: [] as unknown[], debug: `proxy fetch: ${msg}` };
         }
       })
     );
