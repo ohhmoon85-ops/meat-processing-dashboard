@@ -55,17 +55,20 @@ function httpsGet(url: string): Promise<string> {
   });
 }
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Content-Type': 'application/json',
-};
+function setCors(res: VercelResponse) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'OPTIONS') return res.status(200).setHeader('Access-Control-Allow-Origin', '*').end();
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { issueNo, issueDate, serviceKey } = req.query as Record<string, string>;
+  const issueNo  = String(req.query.issueNo  ?? '');
+  const issueDate = String(req.query.issueDate ?? '');
+  const serviceKey = String(req.query.serviceKey ?? '');
+
   if (!issueNo || !serviceKey) {
     return res.status(400).json({ error: 'issueNo, serviceKey 파라미터가 필요합니다.' });
   }
@@ -77,9 +80,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const xml = await httpsGet(url);
     const items = extractItems(xml);
-    return res.status(200).set(CORS).json({ items });
+    return res.status(200).json({ items });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return res.status(502).set(CORS).json({ error: msg, url });
+    return res.status(502).json({ error: msg, url });
   }
 }
