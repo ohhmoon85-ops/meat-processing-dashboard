@@ -130,53 +130,41 @@ export default async function handler(req: Request): Promise<Response> {
           `&serviceKey=${encodeURIComponent(apiKey)}`;
         if (issueDate) url += `&issueDate=${encodeURIComponent(issueDate)}`;
 
-        // EKAPE 서버가 브라우저 헤더 없으면 연결을 차단하는 경우 대비
-        const fetchOptions: RequestInit = {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/xml, text/xml, */*;q=0.8',
-            'Accept-Language': 'ko-KR,ko;q=0.9',
-            'Connection': 'close',
-          },
-        };
+        // 8초 타임아웃 (fetch가 무한 대기하면 Edge Function 전체 타임아웃 방지)
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
 
-        // 최대 3회 재시도 (서버 부하 분산 또는 일시적 오류 대비)
-        let lastErr = '';
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            const fetchRes = await fetch(url, fetchOptions);
-            const xml = await fetchRes.text();
+        try {
+          const fetchRes = await fetch(url, { signal: controller.signal });
+          clearTimeout(timer);
+          const xml = await fetchRes.text();
 
-            if (!fetchRes.ok) {
-              return {
-                issueNo,
-                items: [] as unknown[],
-                debug: `HTTP ${fetchRes.status} (attempt ${attempt}): ${xml.slice(0, 300)}`,
-              };
-            }
-
-            try {
-              return { issueNo, items: extractItems(xml), debug: undefined };
-            } catch (e) {
-              return {
-                issueNo,
-                items: [] as unknown[],
-                debug: `parse (attempt ${attempt}): ${e instanceof Error ? e.message : String(e)} | xml: ${xml.slice(0, 300)}`,
-              };
-            }
-          } catch (e) {
-            lastErr = e instanceof Error ? e.message : String(e);
-            if (attempt < 3) {
-              await new Promise((r) => setTimeout(r, 800 * attempt));
-            }
+          if (!fetchRes.ok) {
+            return {
+              issueNo,
+              items: [] as unknown[],
+              debug: `HTTP ${fetchRes.status}: ${xml.slice(0, 300)}`,
+            };
           }
+
+          try {
+            return { issueNo, items: extractItems(xml), debug: undefined };
+          } catch (e) {
+            return {
+              issueNo,
+              items: [] as unknown[],
+              debug: `parse: ${e instanceof Error ? e.message : String(e)} | xml: ${xml.slice(0, 300)}`,
+            };
+          }
+        } catch (e) {
+          clearTimeout(timer);
+          const msg = e instanceof Error ? e.message : String(e);
+          return {
+            issueNo,
+            items: [] as unknown[],
+            debug: `fetch: ${msg} | url: ${url}`,
+          };
         }
-        return {
-          issueNo,
-          items: [] as unknown[],
-          debug: `fetch failed (3 attempts): ${lastErr} | url: ${url}`,
-        };
       })
     );
 
