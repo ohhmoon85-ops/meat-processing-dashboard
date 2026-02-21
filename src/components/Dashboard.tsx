@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings } from 'lucide-react';
+import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut } from 'lucide-react';
 import { exportToExcel, generateDummyData } from '../utils/excelExport';
 import { downloadExcelReport } from '../utils/downloadExcelReport';
 import GradeCertificatePrintModal from './GradeCertificatePrintModal';
 import SettingsModal, { BUSINESS_INFO_KEY, loadBusinessInfo } from './SettingsModal';
 import type { BusinessInfo } from './SettingsModal';
+import { supabase } from '../lib/supabase';
 
 // 개체번호 데이터 타입
 interface AnimalData {
@@ -58,6 +59,11 @@ const Dashboard: React.FC = () => {
     setBusinessInfo(info);
     localStorage.setItem(BUSINESS_INFO_KEY, JSON.stringify(info));
     setShowSettings(false);
+  };
+
+  // ── 로그아웃 ─────────────────────────────────────────────────────
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
   };
 
   // 섹션 B: 농림부 보고용 조회 월
@@ -484,13 +490,22 @@ const Dashboard: React.FC = () => {
               축산물 등급판정서 출력 및 농림부 보고 자동화 시스템
             </p>
           </div>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 shadow-sm transition-all"
-          >
-            <Settings className="w-4 h-4 text-gray-500" />
-            업체 설정
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 shadow-sm transition-all"
+            >
+              <Settings className="w-4 h-4 text-gray-500" />
+              업체 설정
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-red-50 hover:border-red-300 hover:text-red-600 shadow-sm transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+              로그아웃
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
