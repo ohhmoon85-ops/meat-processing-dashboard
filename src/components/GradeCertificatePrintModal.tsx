@@ -1,5 +1,11 @@
+/**
+ * 축산물 (소) 등급판정확인서 인쇄 모달
+ *
+ * - Step 1 (현재 작동): EKAPE issueNo API → 도축장·판정일·성별 등 기본 정보 표시
+ * - Step 2 (권한 승인 후): EKAPE cattle API → 도체번호·품종·도체중·육질·육량 등급 표시
+ */
 import React, { useEffect, useState } from 'react';
-import { X, Printer, Loader2, AlertTriangle, CheckCircle, FileText } from 'lucide-react';
+import { X, Printer, Loader2, AlertTriangle, FileText } from 'lucide-react';
 
 // ── 타입 ──────────────────────────────────────────────────────────
 interface AnimalItem {
@@ -9,25 +15,23 @@ interface AnimalItem {
   birthDate: string;
 }
 
-interface CertItem {
-  animalNo: string;
-  status: 'loading' | 'success' | 'error' | 'skipped';
-  errorMsg?: string;
-  data?: EkapeResult;
-}
-
 interface EkapeDetail {
   [key: string]: string | number | undefined;
 }
 
 interface EkapeIssueItem {
-  issueNo?: string;
-  issueDe?: string;
-  butchYmd?: string;
-  butchPlcNm?: string;
-  slauYmd?: string;
-  detail?: EkapeDetail[];
-  detailError?: string;
+  issueNo?: unknown;
+  issueDate?: unknown;
+  abattCode?: unknown;
+  abattDate?: unknown;
+  abattNm?: unknown;
+  judgeDate?: unknown;
+  judgeKindCd?: unknown;
+  judgeKindNm?: unknown;
+  judgeSexNm?: unknown;
+  butchYmd?: unknown;
+  butchPlcNm?: unknown;
+  sexNm?: unknown;
   [key: string]: unknown;
 }
 
@@ -35,7 +39,15 @@ interface EkapeResult {
   animalNo: string;
   totalCount: number;
   items: EkapeIssueItem[];
-  gradeInfo?: EkapeDetail[]; // 3단계: 축산물등급판정정보 서비스 결과
+  gradeInfo?: EkapeDetail[];
+  gradeInfoDebug?: string | null;
+}
+
+interface CertItem {
+  animalNo: string;
+  status: 'loading' | 'success' | 'error' | 'skipped';
+  errorMsg?: string;
+  data?: EkapeResult;
 }
 
 interface Props {
@@ -43,67 +55,19 @@ interface Props {
   onClose: () => void;
 }
 
-// ── EKAPE 필드 한글 레이블 매핑 ───────────────────────────────────
-const FIELD_LABELS: Record<string, string> = {
-  // ── 1단계 issueNo 조회 실제 응답 필드 ─────────────────────────
-  animalNo:           '개체번호(이력번호)',
-  issueNo:            '확인서 발급번호',
-  issueDate:          '확인서 발급일',
-  abattCode:          '도축장 코드',
-  abattDate:          '도축일자',
-  abattNm:            '도축장명',
-  judgeDate:          '등급판정일',
-  judgeKindCd:        '판정종류 코드',
-  judgeKindNm:        '판정종류',
-  judgeSexNm:         '성별',
-  // ── 기존/추가 필드 ──────────────────────────────────────────
-  issueDe:            '발급일자',
-  butchYmd:           '도축일자',
-  butchPlcNm:         '도축장명',
-  slauYmd:            '도살일자',
-  liveStockNm:        '축종',
-  sexNm:              '성별',
-  birthYmd:           '출생일',
-  farmNm:             '농장명',
-  farmAddr:           '농장주소',
-  // ── 2단계 cattle 상세 필드 ──────────────────────────────────
-  gradeYmd:           '등급판정일',
-  gradeName:          '최종 등급',
-  gradeNm:            '등급',
-  qulGradeNm:         '육질등급',
-  yieldGradeNm:       '육량등급',
-  carcassWeight:      '도체중(kg)',
-  backfatThick:       '등지방두께(mm)',
-  longissimus:        '배최장근단면적(㎠)',
-  marbleScore:        '근내지방도',
-  meatColorScore:     '육색',
-  fatColorScore:      '지방색',
-  textureScore:       '조직감',
-  maturityScore:      '성숙도',
-  surfaceFatScore:    '표면지방색',
-  yieldIndex:         '육량지수',
-  inspecPlcNm:        '판정장명',
-  inspecNo:           '판정번호',
-};
-
-// 표시할 필드 순서 (없는 필드는 자동으로 기타 항목으로 출력)
-const PREFERRED_ORDER = [
-  'gradeName', 'qulGradeNm', 'yieldGradeNm', 'carcassWeight',
-  'backfatThick', 'longissimus', 'marbleScore', 'meatColorScore',
-  'fatColorScore', 'textureScore', 'maturityScore', 'yieldIndex',
-  'gradeYmd', 'butchYmd', 'butchPlcNm', 'inspecPlcNm',
-];
-
-// EKAPE 유효 개체번호: 12자리 숫자
+// ── 헬퍼 ─────────────────────────────────────────────────────────
 const isValidEkapeNo = (no: string) => /^\d{12}$/.test(no.replace(/[-\s]/g, ''));
 
-// ── 등급 배지 색상 ─────────────────────────────────────────────────
-const gradeBadgeColor = (grade: string) => {
-  if (grade.includes('1++')) return 'bg-purple-100 text-purple-800 border-purple-300';
-  if (grade.includes('1+'))  return 'bg-blue-100 text-blue-800 border-blue-300';
-  if (grade.includes('1'))   return 'bg-green-100 text-green-800 border-green-300';
-  if (grade.includes('2'))   return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-  return 'bg-gray-100 text-gray-700 border-gray-300';
+const fmtDate = (v: unknown): string => {
+  const s = String(v ?? '').trim();
+  if (!s) return '—';
+  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  return s;
+};
+
+const str = (v: unknown): string => {
+  const s = String(v ?? '').trim();
+  return s || '—';
 };
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────
@@ -125,12 +89,10 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
       await Promise.all(
         animals.map(async (animal, idx) => {
           if (!isValidEkapeNo(animal.animalNumber)) return;
-
           const cleanNo = animal.animalNumber.replace(/[-\s]/g, '');
           try {
             const res = await fetch(`/api/grade-certificate?animalNo=${encodeURIComponent(cleanNo)}`);
             const json = await res.json();
-
             if (!res.ok) {
               setCerts((prev) =>
                 prev.map((c, i) =>
@@ -139,7 +101,6 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
               );
               return;
             }
-
             setCerts((prev) =>
               prev.map((c, i) =>
                 i === idx ? { ...c, status: 'success', data: json as EkapeResult } : c
@@ -149,7 +110,11 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
             setCerts((prev) =>
               prev.map((c, i) =>
                 i === idx
-                  ? { ...c, status: 'error', errorMsg: err instanceof Error ? err.message : '네트워크 오류' }
+                  ? {
+                      ...c,
+                      status: 'error',
+                      errorMsg: err instanceof Error ? err.message : '네트워크 오류',
+                    }
                   : c
               )
             );
@@ -157,7 +122,6 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
         })
       );
     };
-
     void fetchAll();
   }, [animals]);
 
@@ -170,9 +134,8 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
     }, 100);
   };
 
-  // ── 집계 ─────────────────────────────────────────────────────────
-  const total = certs.length;
-  const loaded = certs.filter((c) => c.status !== 'loading').length;
+  const total    = certs.length;
+  const loaded   = certs.filter((c) => c.status !== 'loading').length;
   const succeeded = certs.filter((c) => c.status === 'success').length;
 
   return (
@@ -181,10 +144,20 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
       <style>{`
         @media print {
           body > *:not(#cert-print-root) { display: none !important; }
-          #cert-print-root { position: static !important; }
+          #cert-print-root {
+            position: static !important;
+            background: white !important;
+            overflow: visible !important;
+          }
           .no-print { display: none !important; }
-          .cert-card { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; border: 1px solid #ccc !important; }
-          .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+          .cert-page {
+            break-after: page;
+            border: 1px solid #555 !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            padding: 24px !important;
+          }
+          .cert-page:last-child { break-after: auto; }
         }
       `}</style>
 
@@ -198,10 +171,10 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-blue-600" />
             <div>
-              <h2 className="text-lg font-bold text-gray-800">축산물 등급판정 확인서</h2>
+              <h2 className="text-lg font-bold text-gray-800">축산물 (소) 등급판정확인서</h2>
               <p className="text-sm text-gray-500">
                 {loaded < total
-                  ? `조회 중... ${loaded}/${total}`
+                  ? `조회 중... ${loaded} / ${total}`
                   : `${succeeded}건 조회 완료 (전체 ${total}건)`}
               </p>
             </div>
@@ -237,11 +210,11 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
           </div>
         )}
 
-        {/* 카드 목록 */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-          <div className="print-grid grid grid-cols-1 md:grid-cols-2 gap-5 max-w-5xl mx-auto">
+        {/* 확인서 목록 */}
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-100 print:p-0 print:bg-white">
+          <div className="max-w-5xl mx-auto flex flex-col gap-6 print:gap-0">
             {certs.map((cert, idx) => (
-              <CertCard key={idx} cert={cert} index={idx} />
+              <CertCard key={idx} cert={cert} />
             ))}
           </div>
         </div>
@@ -250,15 +223,15 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
   );
 };
 
-// ── 개별 판정서 카드 ──────────────────────────────────────────────
-const CertCard: React.FC<{ cert: CertItem; index: number }> = ({ cert, index }) => {
+// ── 개별 카드 (상태별 분기) ────────────────────────────────────────
+const CertCard: React.FC<{ cert: CertItem }> = ({ cert }) => {
   if (cert.status === 'loading') {
     return (
-      <div className="cert-card bg-white rounded-xl shadow p-6 flex items-center gap-4">
+      <div className="bg-white rounded-xl shadow p-8 flex items-center gap-4">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin shrink-0" />
         <div>
-          <p className="text-sm text-gray-500">조회 중...</p>
-          <p className="font-mono text-base font-semibold text-gray-700">{cert.animalNo}</p>
+          <p className="text-sm text-gray-500">EKAPE API 조회 중...</p>
+          <p className="font-mono text-base font-semibold text-gray-700 mt-1">{cert.animalNo}</p>
         </div>
       </div>
     );
@@ -266,14 +239,13 @@ const CertCard: React.FC<{ cert: CertItem; index: number }> = ({ cert, index }) 
 
   if (cert.status === 'skipped') {
     return (
-      <div className="cert-card no-print bg-yellow-50 border border-yellow-200 rounded-xl p-5 flex items-start gap-3">
+      <div className="no-print bg-yellow-50 border border-yellow-200 rounded-xl p-5 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-yellow-700">EKAPE 조회 불가</p>
           <p className="font-mono text-sm text-gray-600 mt-0.5">{cert.animalNo}</p>
           <p className="text-xs text-yellow-600 mt-1">
-            라벨 번호(L-prefix)는 EKAPE 등급판정 API 조회 대상이 아닙니다.
-            12자리 숫자 개체번호만 조회할 수 있습니다.
+            12자리 숫자 이력번호만 조회 가능합니다. (L-prefix 라벨 번호 제외)
           </p>
         </div>
       </div>
@@ -282,7 +254,7 @@ const CertCard: React.FC<{ cert: CertItem; index: number }> = ({ cert, index }) 
 
   if (cert.status === 'error') {
     return (
-      <div className="cert-card no-print bg-red-50 border border-red-200 rounded-xl p-5 flex items-start gap-3">
+      <div className="no-print bg-red-50 border border-red-200 rounded-xl p-5 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
         <div>
           <p className="text-sm font-semibold text-red-700">조회 실패</p>
@@ -293,170 +265,205 @@ const CertCard: React.FC<{ cert: CertItem; index: number }> = ({ cert, index }) 
     );
   }
 
-  // ── 성공 케이스: 판정서 카드 ─────────────────────────────────────
-  const result = cert.data!;
+  // ── 성공: 확인서 문서 형태 출력 ────────────────────────────────
+  const result     = cert.data!;
   const issueItems = result.items ?? [];
+  const gradeInfo  = result.gradeInfo ?? [];
+  const hasGradeError = !!result.gradeInfoDebug;
+
+  if (issueItems.length === 0) {
+    return (
+      <div className="no-print bg-gray-50 border border-gray-200 rounded-xl p-5 text-sm text-gray-500 text-center">
+        등급판정 기록이 없습니다. ({cert.animalNo})
+      </div>
+    );
+  }
 
   return (
-    <div className="cert-card bg-white rounded-xl shadow p-6">
-      {/* 카드 헤더 */}
-      <div className="flex items-start justify-between mb-4 pb-3 border-b">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle className="w-4 h-4 text-green-500" />
-            <span className="text-xs font-semibold text-green-600 uppercase tracking-wider">
-              등급판정 확인서
-            </span>
-          </div>
-          <p className="font-mono text-base font-bold text-gray-800">{result.animalNo}</p>
+    <>
+      {issueItems.map((issueItem, i) => (
+        <CertificateDocument
+          key={i}
+          animalNo={result.animalNo}
+          issueItem={issueItem}
+          // 첫 번째 issueItem에만 gradeInfo 표시 (API가 flatten 반환하므로)
+          gradeRows={i === 0 ? gradeInfo : []}
+          hasGradeError={hasGradeError}
+        />
+      ))}
+    </>
+  );
+};
+
+// ── 공식 확인서 문서 레이아웃 ─────────────────────────────────────
+const CertificateDocument: React.FC<{
+  animalNo: string;
+  issueItem: EkapeIssueItem;
+  gradeRows: EkapeDetail[];
+  hasGradeError: boolean;
+}> = ({ animalNo, issueItem, gradeRows, hasGradeError }) => {
+  return (
+    <div className="cert-page bg-white border border-gray-500 shadow-md p-6 text-xs">
+
+      {/* ── 문서 헤더 ── */}
+      <div className="flex items-start justify-between mb-1">
+        <div className="text-gray-500 min-w-[160px]">
+          발급번호: <span className="text-gray-800 font-medium">{str(issueItem.issueNo)}</span>
         </div>
-        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
-          No.{String(index + 1).padStart(2, '0')}
-        </span>
+        <div className="text-center flex-1 px-2">
+          <h1 className="text-base font-bold tracking-widest text-black">
+            축산물 (소) 등급판정확인서
+          </h1>
+          <p className="text-xs text-gray-500 mt-0.5">축산물품질평가원</p>
+        </div>
+        <div className="text-gray-500 min-w-[160px] text-right">
+          발급일: <span className="text-gray-800 font-medium">{fmtDate(issueItem.issueDate)}</span>
+        </div>
       </div>
 
-      {/* 발급 건별 */}
-      {issueItems.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-4">등급판정 정보 없음</p>
-      ) : (
-        issueItems.map((item, i) => {
-          const details = (item.detail ?? []) as EkapeDetail[];
-          // 최종 등급 추출 (detail 첫 번째 항목 기준)
-          const topDetail = details[0] ?? {};
-          const gradeName = String(
-            topDetail.gradeName ?? topDetail.qulGradeNm ?? topDetail.gradeNm ?? ''
-          );
+      <hr className="border-gray-400 my-2" />
 
-          // 표시 필드 정렬
-          const allKeys = Object.keys(topDetail).filter(
-            (k) => topDetail[k] !== undefined && topDetail[k] !== '' && k !== 'gradeName'
-          );
-          const orderedKeys = [
-            ...PREFERRED_ORDER.filter((k) => allKeys.includes(k)),
-            ...allKeys.filter((k) => !PREFERRED_ORDER.includes(k)),
-          ];
+      {/* ── 기본 정보 (Step 1 데이터) ── */}
+      <div className="border border-gray-300 rounded p-3 mb-3 grid grid-cols-3 gap-x-6 gap-y-1.5 text-xs">
+        <InfoRow label="이력번호" value={<span className="font-mono font-semibold">{animalNo}</span>} />
+        <InfoRow label="도축장명" value={str(issueItem.abattNm ?? issueItem.butchPlcNm)} />
+        <InfoRow label="도축일자" value={fmtDate(issueItem.abattDate ?? issueItem.butchYmd)} />
+        <InfoRow label="판정종류" value={str(issueItem.judgeKindNm)} />
+        <InfoRow label="등급판정일" value={fmtDate(issueItem.judgeDate)} />
+        <InfoRow label="성별" value={str(issueItem.judgeSexNm ?? issueItem.sexNm)} />
+      </div>
 
-          // issueItem 자체 필드 (detail 제외)
-          const issueFields = Object.entries(item).filter(
-            ([k, v]) => k !== 'detail' && k !== 'detailError' && v !== undefined && v !== ''
-          );
-
-          return (
-            <div key={i} className={i > 0 ? 'mt-4 pt-4 border-t' : ''}>
-              {/* 등급 배지 */}
-              {gradeName && (
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={`text-lg font-black px-3 py-1 rounded-lg border-2 ${gradeBadgeColor(gradeName)}`}>
-                    {gradeName}
-                  </span>
-                  <span className="text-xs text-gray-500">최종 등급</span>
-                </div>
-              )}
-
-              {/* 발급 정보 */}
-              {issueFields.length > 0 && (
-                <table className="w-full text-xs mb-3">
-                  <tbody>
-                    {issueFields.map(([k, v]) => (
-                      <tr key={k} className="border-b border-gray-50">
-                        <td className="py-1 pr-2 text-gray-400 whitespace-nowrap w-28">
-                          {FIELD_LABELS[k] ?? k}
-                        </td>
-                        <td className="py-1 font-medium text-gray-700">{String(v)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              {/* 등급 상세 */}
-              {orderedKeys.length > 0 && (
-                <table className="w-full text-xs">
-                  <tbody>
-                    {orderedKeys.map((k) => (
-                      <tr key={k} className="border-b border-gray-50">
-                        <td className="py-1 pr-2 text-gray-400 whitespace-nowrap w-28">
-                          {FIELD_LABELS[k] ?? k}
-                        </td>
-                        <td className="py-1 font-medium text-gray-700">{String(topDetail[k])}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              {item.detailError && (
-                <div className="mt-3 p-2.5 bg-orange-50 border border-orange-200 rounded-lg text-xs">
-                  {item.detailError.includes('99') || item.detailError.includes('ACCESS DENIED') ? (
-                    <>
-                      <p className="font-semibold text-orange-700 mb-1">
-                        ⚠ 소도체 상세 정보 조회 권한 없음
-                      </p>
-                      <p className="text-orange-600">
-                        위 기본 정보(발급번호·도축일·판정일·성별)는 정상 조회되었습니다.
-                        소도체 등급 상세(근내지방도·도체중 등)를 보려면
-                        공공데이터포털에서 <strong>「축산물 소도체 등급판정 확인서」</strong> 서비스
-                        이용 승인이 필요합니다.
-                      </p>
-                    </>
+      {/* ── 도체 등급 테이블 ── */}
+      <div className="overflow-x-auto mb-3">
+        <table className="w-full border-collapse text-center text-xs">
+          <thead>
+            {/* 1행: 구분 헤더 */}
+            <tr>
+              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>도체번호</th>
+              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>품종</th>
+              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>성별</th>
+              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>
+                도체중<br />(kg)
+              </th>
+              <th
+                className="border border-gray-400 px-1 py-1"
+                colSpan={5}
+                style={{ background: '#dbeafe' }}
+              >
+                육 질 등 급
+              </th>
+              <th
+                className="border border-gray-400 px-1 py-1"
+                colSpan={4}
+                style={{ background: '#dcfce7' }}
+              >
+                육 량 등 급
+              </th>
+            </tr>
+            {/* 2행: 세부 컬럼 */}
+            <tr>
+              <th className="border border-gray-400 px-1 py-1 font-semibold" style={{ background: '#dbeafe' }}>등급</th>
+              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>
+                근내<br />지방도
+              </th>
+              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>육색</th>
+              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>지방색</th>
+              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>조직감</th>
+              <th className="border border-gray-400 px-1 py-1 font-semibold" style={{ background: '#dcfce7' }}>등급</th>
+              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dcfce7' }}>
+                등심단면적<br />(㎠)
+              </th>
+              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dcfce7' }}>
+                등지방두께<br />(mm)
+              </th>
+              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dcfce7' }}>
+                육량<br />지수
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {gradeRows.length > 0 ? (
+              gradeRows.map((gi, i) => (
+                <tr key={i} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
+                  <td className="border border-gray-300 px-1 py-1.5">
+                    {str(gi.carcassNo ?? gi.inspecNo)}
+                  </td>
+                  <td className="border border-gray-300 px-1 py-1.5">
+                    {str(gi.breedNm ?? gi.liveStockNm)}
+                  </td>
+                  <td className="border border-gray-300 px-1 py-1.5">
+                    {str(gi.sexNm ?? issueItem.judgeSexNm)}
+                  </td>
+                  <td className="border border-gray-300 px-1 py-1.5">
+                    {str(gi.carcassWeight)}
+                  </td>
+                  {/* 육질등급 */}
+                  <td className="border border-gray-300 px-1 py-1.5 font-bold text-blue-800">
+                    {str(gi.qulGradeNm ?? gi.gradeNm)}
+                  </td>
+                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.marbleScore)}</td>
+                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.meatColorScore)}</td>
+                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.fatColorScore)}</td>
+                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.textureScore)}</td>
+                  {/* 육량등급 */}
+                  <td className="border border-gray-300 px-1 py-1.5 font-bold text-green-800">
+                    {str(gi.yieldGradeNm)}
+                  </td>
+                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.longissimus)}</td>
+                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.backfatThick)}</td>
+                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.yieldIndex)}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td
+                  className="border border-gray-300 px-2 py-4 text-center"
+                  colSpan={13}
+                >
+                  {hasGradeError ? (
+                    <p className="text-orange-600 font-medium">
+                      ⚠ 소도체 상세 정보 조회 권한 미승인 —
+                      EKAPE API 권한 획득 후 자동으로 표시됩니다
+                    </p>
                   ) : (
-                    <p className="text-red-600">상세 조회 오류: {item.detailError}</p>
+                    <span className="text-gray-400">등급판정 상세 정보 없음</span>
                   )}
-                </div>
-              )}
-            </div>
-          );
-        })
-      )}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
-      {/* ── 3단계: 축산물등급판정정보 (gradeInfo) ── */}
-      {result.gradeInfo && result.gradeInfo.length > 0 && (
-        <div className="mt-4 pt-4 border-t">
-          <p className="text-xs font-semibold text-blue-600 mb-2 uppercase tracking-wider">
-            등급판정 상세정보
-          </p>
-          {result.gradeInfo.map((gi, gi_i) => {
-            // 등급 추출
-            const gradeVal = String(
-              gi.gradeName ?? gi.gradeNm ?? gi.qulGradeNm ?? ''
-            );
-            // 표시 필드 정렬
-            const allKeys = Object.keys(gi).filter(
-              (k) => gi[k] !== undefined && gi[k] !== ''
-            );
-            const orderedKeys = [
-              ...PREFERRED_ORDER.filter((k) => allKeys.includes(k)),
-              ...allKeys.filter((k) => !PREFERRED_ORDER.includes(k)),
-            ];
-            return (
-              <div key={gi_i} className={gi_i > 0 ? 'mt-3 pt-3 border-t border-dashed' : ''}>
-                {gradeVal && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`text-lg font-black px-3 py-1 rounded-lg border-2 ${gradeBadgeColor(gradeVal)}`}>
-                      {gradeVal}
-                    </span>
-                    <span className="text-xs text-gray-500">최종 등급</span>
-                  </div>
-                )}
-                <table className="w-full text-xs">
-                  <tbody>
-                    {orderedKeys.map((k) => (
-                      <tr key={k} className="border-b border-gray-50">
-                        <td className="py-1 pr-2 text-gray-400 whitespace-nowrap w-28">
-                          {FIELD_LABELS[k] ?? k}
-                        </td>
-                        <td className="py-1 font-medium text-gray-700">{String(gi[k])}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
+      {/* ── 보조 정보 행 (gradeRows 있을 때만) ── */}
+      {gradeRows.length > 0 && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600 mb-3 px-1">
+          {gradeRows[0]?.maturityScore !== undefined && (
+            <InfoRow label="성숙도" value={str(gradeRows[0].maturityScore)} />
+          )}
+          {gradeRows[0]?.surfaceFatScore !== undefined && (
+            <InfoRow label="표면지방색" value={str(gradeRows[0].surfaceFatScore)} />
+          )}
+          {gradeRows[0]?.inspecPlcNm !== undefined && (
+            <InfoRow label="판정장" value={str(gradeRows[0].inspecPlcNm)} />
+          )}
         </div>
       )}
+
+      {/* ── 하단 확인 문구 ── */}
+      <div className="border-t border-gray-300 pt-2 mt-3 text-center text-xs text-gray-500">
+        위와 같이 등급판정 결과를 확인합니다.
+      </div>
     </div>
   );
 };
+
+// ── 인라인 레이블-값 쌍 ───────────────────────────────────────────
+const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="flex gap-1 items-baseline">
+    <span className="text-gray-500 shrink-0">{label}:</span>
+    <span className="text-gray-800">{value}</span>
+  </div>
+);
 
 export default GradeCertificatePrintModal;
