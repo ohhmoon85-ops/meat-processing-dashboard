@@ -155,20 +155,39 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
       {/* ── 인쇄 전용 CSS ── */}
       <style>{`
         @media print {
-          /* 모달 외 모든 요소 숨김 */
-          body > *:not(#cert-print-root) { display: none !important; }
+          /*
+           * visibility 방식: display:none 으로 #root 를 통째로 숨기면
+           * 그 안의 모달도 사라지기 때문에 visibility 를 사용한다.
+           * body 전체를 hidden 으로 만든 뒤 모달 내부만 visible 로 복원.
+           */
+          body * { visibility: hidden !important; }
 
-          /* 모달 루트: fixed→static, 오버레이 배경 제거 */
+          /* 모달 루트와 그 모든 자식을 visible 로 복원 */
+          #cert-print-root,
+          #cert-print-root * { visibility: visible !important; }
+
+          /* 헤더·진행바는 다시 숨김 (ID+class 으로 specificity 높임) */
+          #cert-print-root .no-print {
+            visibility: hidden !important;
+            display: none !important;
+            height: 0 !important;
+          }
+
+          /* 모달 루트: absolute 로 전환해 문서 흐름에 삽입, 배경 흰색 */
           #cert-print-root {
-            position: static !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: auto !important;
+            width: 100% !important;
+            height: auto !important;
             background: white !important;
             overflow: visible !important;
             display: block !important;
-            height: auto !important;
-            inset: auto !important;
           }
 
-          /* 스크롤 컨테이너: overflow-y-auto 와 flex-1 높이 제약 해제 */
+          /* 스크롤 컨테이너: flex-1·overflow-y-auto 높이 제약 해제 */
           #cert-cards-container {
             overflow: visible !important;
             height: auto !important;
@@ -178,14 +197,10 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
             background: white !important;
           }
 
-          /* 확인서 내부 래퍼 */
           #cert-cards-container > div {
             max-width: none !important;
             gap: 0 !important;
           }
-
-          /* 헤더·진행바 숨김 */
-          .no-print { display: none !important; }
 
           /* 확인서 카드: 페이지 나누기 */
           .cert-page {
