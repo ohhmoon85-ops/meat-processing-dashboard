@@ -81,8 +81,14 @@ const Dashboard: React.FC = () => {
 
     const added: AnimalData[] = [];
     let duplicateCount = 0;
+    let labelSkipCount = 0; // L-prefix 업체 내부 이력번호 제외 수
 
     for (const item of newItems) {
+      // L로 시작하는 업체 내부 이력번호는 EKAPE 조회 불가 → 제외
+      if (/^[A-Za-z]/i.test(item.animalNumber.replace(/[-\s]/g, ''))) {
+        labelSkipCount++;
+        continue;
+      }
       const k = rowKey(item);
       if (existingKeys.has(k)) {
         duplicateCount++;
@@ -96,9 +102,13 @@ const Dashboard: React.FC = () => {
       setAnimalList((prev) => [...prev, ...added]);
       let msg = `${added.length}건 추가되었습니다.`;
       if (duplicateCount > 0) msg += ` (중복 ${duplicateCount}건 제외)`;
+      if (labelSkipCount > 0) msg += ` (L-prefix ${labelSkipCount}건 제외)`;
       showMessage({ type: 'success', text: msg });
-    } else if (duplicateCount > 0) {
-      showMessage({ type: 'warning', text: `중복된 개체번호 ${duplicateCount}건은 추가되지 않았습니다.` });
+    } else if (duplicateCount > 0 || labelSkipCount > 0) {
+      let msg = '';
+      if (duplicateCount > 0) msg += `중복 ${duplicateCount}건`;
+      if (labelSkipCount > 0) msg += `${msg ? ', ' : ''}L-prefix ${labelSkipCount}건`;
+      showMessage({ type: 'warning', text: `${msg}은 추가되지 않았습니다.` });
     }
   };
 
@@ -264,16 +274,13 @@ const Dashboard: React.FC = () => {
             weightKg:       weight || undefined,
           };
 
-          // 이력번호 1 추가
-          if (traceNo1) {
+          // 이력번호 1 추가 (L로 시작하는 업체 내부 이력번호 제외)
+          if (traceNo1 && !/^[A-Za-z]/i.test(traceNo1)) {
             items.push({ animalNumber: traceNo1, ...sharedFields });
           }
-          // 이력번호 2 추가 (두 번째 줄에서 읽은 것이 유효한 이력번호 형식일 때)
-          if (traceNo2 && /^[A-Z]\d{10,}/.test(traceNo2)) {
-            items.push({ animalNumber: traceNo2, ...sharedFields });
-          }
+          // 이력번호 2는 L-prefix 형식이므로 추가하지 않음
 
-          // 2줄짜리 레코드면 2칸 전진, 아니면 1칸
+          // 2줄짜리 레코드면 2칸 전진 (두 번째 줄이 L-prefix 형식일 때), 아니면 1칸
           i += traceNo2 && /^[A-Z]\d{10,}/.test(traceNo2) ? 2 : 1;
         }
 
