@@ -420,19 +420,21 @@ const CertificateDocument: React.FC<{
       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '3px' }}>
         <tbody>
           <tr>
-            <td style={{ width: '72%', padding: '6px 12px', verticalAlign: 'middle', borderRight: '1px solid #333' }}>
-              <div style={{ textAlign: 'center', marginBottom: '5px' }}>
-                <span style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '3px' }}>
+            <td style={{ width: '72%', padding: '8px 14px', verticalAlign: 'middle', borderRight: '1px solid #333' }}>
+              {/* 발급번호 먼저 (공식 양식: 제목 위) */}
+              <div style={{ fontSize: '10px', color: '#444', marginBottom: '6px' }}>
+                발급번호 :&nbsp;
+                <span style={{ fontWeight: 'bold', color: '#000', fontSize: '18px' }}>{issueNo}</span>
+              </div>
+              {/* 제목 아래 */}
+              <div style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: '22px', fontWeight: 'bold', letterSpacing: '4px' }}>
                   축산물 (소) 등급판정확인서
                 </span>
               </div>
-              <div style={{ textAlign: 'center', fontSize: '10px', color: '#333' }}>
-                발급번호 :&nbsp;
-                <span style={{ fontWeight: 'bold', color: '#000', fontSize: '14px' }}>{issueNo}</span>
-              </div>
             </td>
             <td style={{ width: '28%', padding: '6px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
-              <div style={{ width: '68px', height: '68px', border: '1px solid #aaa', margin: '0 auto',
+              <div style={{ width: '72px', height: '72px', border: '1px solid #aaa', margin: '0 auto',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#aaa' }}>
                 QR
               </div>
@@ -490,7 +492,9 @@ const CertificateDocument: React.FC<{
           </tr>
           <tr>
             <td style={{ ...tdH, padding: '3px 6px' }}>소재지</td>
-            <td colSpan={3} style={{ ...td, padding: '3px 6px' }}>&nbsp;</td>
+            <td style={{ ...td, padding: '3px 6px' }}>&nbsp;</td>
+            <td style={{ ...tdH, padding: '3px 6px', width: '50px', whiteSpace: 'nowrap' }}>전화번호</td>
+            <td style={{ ...td, padding: '3px 6px', width: '90px' }}>&nbsp;</td>
           </tr>
         </tbody>
       </table>
@@ -527,25 +531,25 @@ const CertificateDocument: React.FC<{
               const rBackfat   = str(row.backfatThick);
               return (
                 <tr key={i}>
-                  <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '22px' }}>{rCarcassNo}</td>
-                  <td style={{ ...td, padding: '12px 4px', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '2px' }}>{fmtAnimalNo(animalNo)}</td>
-                  <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{rBreed}</td>
-                  <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{rSex}</td>
-                  <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{rWeight}</td>
-                  <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{rQul}{rMarble ? `(${rMarble})` : ''}</td>
-                  <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{rYield}{rBackfat ? `(${rBackfat})` : ''}</td>
+                  <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '38px', textAlign: 'center' }}>{rCarcassNo}</td>
+                  <td style={{ ...td, padding: '20px 4px', fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', textAlign: 'center' }}>{fmtAnimalNo(animalNo)}</td>
+                  <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{rBreed}</td>
+                  <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{rSex}</td>
+                  <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{rWeight}</td>
+                  <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '18px', textAlign: 'center' }}>{rQul}{rMarble ? `(${rMarble})` : ''}</td>
+                  <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '16px', textAlign: 'center' }}>{rYield}{rBackfat ? `(${rBackfat})` : ''}</td>
                 </tr>
               );
             })
           ) : (
             <tr>
-              <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '22px' }}>&nbsp;</td>
-              <td style={{ ...td, padding: '12px 4px', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '2px' }}>{fmtAnimalNo(animalNo)}</td>
-              <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{breedNm || '\u00a0'}</td>
-              <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{sexDisplay || '\u00a0'}</td>
-              <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{carcassWt || '\u00a0'}</td>
-              <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
-              <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
+              <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '38px', textAlign: 'center' }}>&nbsp;</td>
+              <td style={{ ...td, padding: '20px 4px', fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', textAlign: 'center' }}>{fmtAnimalNo(animalNo)}</td>
+              <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{breedNm || '\u00a0'}</td>
+              <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{sexDisplay || '\u00a0'}</td>
+              <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{carcassWt || '\u00a0'}</td>
+              <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '18px', textAlign: 'center' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
+              <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '16px', textAlign: 'center' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
             </tr>
           )}
         </tbody>
