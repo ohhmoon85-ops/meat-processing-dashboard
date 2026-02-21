@@ -424,11 +424,11 @@ const CertificateDocument: React.FC<{
               {/* 발급번호 먼저 (공식 양식: 제목 위) */}
               <div style={{ fontSize: '10px', color: '#444', marginBottom: '6px' }}>
                 발급번호 :&nbsp;
-                <span style={{ fontWeight: 'bold', color: '#000', fontSize: '18px' }}>{issueNo}</span>
+                <span style={{ fontWeight: 'bold', color: '#000', fontSize: '22px' }}>{issueNo}</span>
               </div>
               {/* 제목 아래 */}
               <div style={{ textAlign: 'center' }}>
-                <span style={{ fontSize: '22px', fontWeight: 'bold', letterSpacing: '4px' }}>
+                <span style={{ fontSize: '24px', fontWeight: 'bold', letterSpacing: '4px' }}>
                   축산물 (소) 등급판정확인서
                 </span>
               </div>
@@ -467,7 +467,7 @@ const CertificateDocument: React.FC<{
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizNo || '\u00a0'}</td>
           </tr>
           <tr>
-            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업소명</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업&nbsp;소&nbsp;명</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizName || '\u00a0'}</td>
             <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업태유형</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizType || '\u00a0'}</td>
@@ -531,25 +531,33 @@ const CertificateDocument: React.FC<{
               const rBackfat   = str(row.backfatThick);
               return (
                 <tr key={i}>
-                  <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '38px', textAlign: 'center' }}>{rCarcassNo}</td>
-                  <td style={{ ...td, padding: '20px 4px', fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', textAlign: 'center' }}>{fmtAnimalNo(animalNo)}</td>
-                  <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{rBreed}</td>
-                  <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{rSex}</td>
-                  <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{rWeight}</td>
-                  <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '18px', textAlign: 'center' }}>{rQul}{rMarble ? `(${rMarble})` : ''}</td>
-                  <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '16px', textAlign: 'center' }}>{rYield}{rBackfat ? `(${rBackfat})` : ''}</td>
+                  <td style={{ ...td, padding: '22px 6px', fontWeight: 'bold', fontSize: '44px', textAlign: 'center' }}>{rCarcassNo}</td>
+                  <td style={{ ...td, padding: '16px 4px', textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', marginBottom: '8px' }}>{fmtAnimalNo(animalNo)}</div>
+                    <div style={{ display: 'inline-block', height: '32px', width: '100px',
+                      background: 'repeating-linear-gradient(90deg,#000 0,#000 2px,#fff 2px,#fff 4px,#000 4px,#000 5px,#fff 5px,#fff 7px,#000 7px,#000 10px,#fff 10px,#fff 12px,#000 12px,#000 13px,#fff 13px,#fff 16px)' }} />
+                  </td>
+                  <td style={{ ...td, padding: '22px 4px', fontSize: '16px', fontWeight: 'bold', textAlign: 'center' }}>{rBreed}</td>
+                  <td style={{ ...td, padding: '22px 4px', fontSize: '16px', fontWeight: 'bold', textAlign: 'center' }}>{rSex}</td>
+                  <td style={{ ...td, padding: '22px 4px', fontSize: '16px', fontWeight: 'bold', textAlign: 'center' }}>{rWeight}</td>
+                  <td style={{ ...td, padding: '22px 6px', fontWeight: 'bold', fontSize: '20px', textAlign: 'center' }}>{rQul}{rMarble ? `(${rMarble})` : ''}</td>
+                  <td style={{ ...td, padding: '22px 6px', fontWeight: 'bold', fontSize: '17px', textAlign: 'center' }}>{rYield}{rBackfat ? `(${rBackfat})` : ''}</td>
                 </tr>
               );
             })
           ) : (
             <tr>
-              <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '38px', textAlign: 'center' }}>&nbsp;</td>
-              <td style={{ ...td, padding: '20px 4px', fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', textAlign: 'center' }}>{fmtAnimalNo(animalNo)}</td>
-              <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{breedNm || '\u00a0'}</td>
-              <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{sexDisplay || '\u00a0'}</td>
-              <td style={{ ...td, padding: '20px 4px', fontSize: '14px', fontWeight: 'bold', textAlign: 'center' }}>{carcassWt || '\u00a0'}</td>
-              <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '18px', textAlign: 'center' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
-              <td style={{ ...td, padding: '20px 6px', fontWeight: 'bold', fontSize: '16px', textAlign: 'center' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
+              <td style={{ ...td, padding: '22px 6px', fontWeight: 'bold', fontSize: '44px', textAlign: 'center' }}>&nbsp;</td>
+              <td style={{ ...td, padding: '16px 4px', textAlign: 'center' }}>
+                <div style={{ fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', marginBottom: '8px' }}>{fmtAnimalNo(animalNo)}</div>
+                <div style={{ display: 'inline-block', height: '32px', width: '100px',
+                  background: 'repeating-linear-gradient(90deg,#000 0,#000 2px,#fff 2px,#fff 4px,#000 4px,#000 5px,#fff 5px,#fff 7px,#000 7px,#000 10px,#fff 10px,#fff 12px,#000 12px,#000 13px,#fff 13px,#fff 16px)' }} />
+              </td>
+              <td style={{ ...td, padding: '22px 4px', fontSize: '16px', fontWeight: 'bold', textAlign: 'center' }}>{breedNm || '\u00a0'}</td>
+              <td style={{ ...td, padding: '22px 4px', fontSize: '16px', fontWeight: 'bold', textAlign: 'center' }}>{sexDisplay || '\u00a0'}</td>
+              <td style={{ ...td, padding: '22px 4px', fontSize: '16px', fontWeight: 'bold', textAlign: 'center' }}>{carcassWt || '\u00a0'}</td>
+              <td style={{ ...td, padding: '22px 6px', fontWeight: 'bold', fontSize: '20px', textAlign: 'center' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
+              <td style={{ ...td, padding: '22px 6px', fontWeight: 'bold', fontSize: '17px', textAlign: 'center' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
             </tr>
           )}
         </tbody>
