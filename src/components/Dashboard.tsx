@@ -13,6 +13,11 @@ interface AnimalData {
   breed: string;
   birthDate: string;
   selected: boolean;
+  // 바코드 납품 정보 (txt 파싱 / 전문 바코드 입력 시 추출)
+  destination?: string;    // 납품처명: 서울길원초등학교
+  cutName?: string;        // 부위명: 설도
+  processingType?: string; // 가공형태: 다짐, 슬라이스 등
+  weightKg?: string;       // 중량(kg): 14.1
 }
 
 type Message = { type: 'success' | 'error' | 'warning'; text: string } | null;
@@ -210,11 +215,13 @@ const Dashboard: React.FC = () => {
           if (!isRecord) { i++; continue; }
 
           // ── 필드 파싱 ────────────────────────────────────────────
-          const rawDate = parts1[0]?.trim() ?? '';
-          const productPart = parts1[1]?.trim() ?? '';
-          const rawWeight = parts1[4]?.trim() ?? '';
-          const traceNo1 = parts1[5]?.trim() ?? '';
-          const traceNo2 = parts2[0]?.trim() ?? '';
+          const rawDate        = parts1[0]?.trim() ?? '';
+          const productPart    = parts1[1]?.trim() ?? '';
+          const rawDestination = parts1[2]?.trim() ?? ''; // 납품처명: 서울길원초등학교(올본)
+          const rawProcType    = parts1[3]?.trim() ?? ''; // 가공형태: 다짐, 슬라이스
+          const rawWeight      = parts1[4]?.trim() ?? '';
+          const traceNo1       = parts1[5]?.trim() ?? '';
+          const traceNo2       = parts2[0]?.trim() ?? '';
 
           // 날짜: YYYYMMDD → YYYY-MM-DD
           const productionDate =
@@ -225,21 +232,33 @@ const Dashboard: React.FC = () => {
           // 품목명[부위명] 분리
           const productMatch = productPart.match(/^(.+?)\[(.+?)\]$/);
           const productName = productMatch ? productMatch[1].trim() : productPart;
-          const partName = productMatch ? productMatch[2].trim() : '-';
+          const partName    = productMatch ? productMatch[2].trim() : '-';
 
           // 중량: "15kg" → "15"
           const weight = rawWeight.replace(/kg$/i, '');
 
+          // 납품처명: 괄호 코드 제거 "서울길원초등학교(올본)" → "서울길원초등학교"
+          const destination = rawDestination.replace(/\([^)]*\)$/, '').trim() || undefined;
+
           // breed 필드에 품목/부위/중량 요약 표시
           const breedLabel = `${productName} / ${partName} (${weight}kg)`;
 
+          const sharedFields = {
+            breed: breedLabel,
+            birthDate: productionDate,
+            destination,
+            cutName:        partName !== '-' ? partName : undefined,
+            processingType: rawProcType || undefined,
+            weightKg:       weight || undefined,
+          };
+
           // 이력번호 1 추가
           if (traceNo1) {
-            items.push({ animalNumber: traceNo1, breed: breedLabel, birthDate: productionDate });
+            items.push({ animalNumber: traceNo1, ...sharedFields });
           }
           // 이력번호 2 추가 (두 번째 줄에서 읽은 것이 유효한 이력번호 형식일 때)
           if (traceNo2 && /^[A-Z]\d{10,}/.test(traceNo2)) {
-            items.push({ animalNumber: traceNo2, breed: breedLabel, birthDate: productionDate });
+            items.push({ animalNumber: traceNo2, ...sharedFields });
           }
 
           // 2줄짜리 레코드면 2칸 전진, 아니면 1칸
@@ -302,7 +321,43 @@ const Dashboard: React.FC = () => {
   const handleBarcodeAdd = () => {
     const trimmed = barcodeInput.trim();
     if (!trimmed) return;
-    addAnimals([{ animalNumber: trimmed, breed: '-', birthDate: '-' }]);
+
+    // 전문 바코드 형식 (|로 구분된 7필드) 감지 및 파싱
+    // 예: "20251210|한우[설도]|서울길원초등학교(올본)|다짐|14.1kg|002192205667|음성농협축산물공판장"
+    const parts = trimmed.split('|');
+    if (parts.length >= 6 && /^\d{8}$/.test(parts[0]?.trim() ?? '')) {
+      const rawDate     = parts[0].trim();
+      const productPart = parts[1]?.trim() ?? '';
+      const rawDest     = parts[2]?.trim() ?? '';
+      const rawProc     = parts[3]?.trim() ?? '';
+      const rawWeight   = parts[4]?.trim() ?? '';
+      const animalNo    = parts[5]?.trim() ?? '';
+
+      const productionDate =
+        rawDate.length === 8
+          ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+          : rawDate;
+
+      const productMatch = productPart.match(/^(.+?)\[(.+?)\]$/);
+      const productName  = productMatch ? productMatch[1].trim() : productPart;
+      const partName     = productMatch ? productMatch[2].trim() : '-';
+      const weight       = rawWeight.replace(/kg$/i, '');
+      const destination  = rawDest.replace(/\([^)]*\)$/, '').trim() || undefined;
+
+      addAnimals([{
+        animalNumber:   animalNo,
+        breed:          `${productName} / ${partName} (${weight}kg)`,
+        birthDate:      productionDate,
+        destination,
+        cutName:        partName !== '-' ? partName : undefined,
+        processingType: rawProc || undefined,
+        weightKg:       weight || undefined,
+      }]);
+    } else {
+      // 이력번호 단독 입력
+      addAnimals([{ animalNumber: trimmed, breed: '-', birthDate: '-' }]);
+    }
+
     setBarcodeInput('');
     barcodeInputRef.current?.focus();
   };

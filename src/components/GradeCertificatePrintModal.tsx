@@ -13,6 +13,11 @@ interface AnimalItem {
   animalNumber: string;
   breed: string;
   birthDate: string;
+  // 바코드 납품 정보
+  destination?: string;    // 납품처명
+  cutName?: string;        // 부위명
+  processingType?: string; // 가공형태 (다짐, 슬라이스 등)
+  weightKg?: string;       // 중량(kg)
 }
 
 interface EkapeDetail {
@@ -48,6 +53,7 @@ interface CertItem {
   status: 'loading' | 'success' | 'error' | 'skipped';
   errorMsg?: string;
   data?: EkapeResult;
+  animal: AnimalItem; // 원본 동물 데이터 (납품 정보 포함)
 }
 
 interface Props {
@@ -75,6 +81,7 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
   const [certs, setCerts] = useState<CertItem[]>(() =>
     animals.map((a) => ({
       animalNo: a.animalNumber,
+      animal: a,
       status: isValidEkapeNo(a.animalNumber) ? 'loading' : 'skipped',
       errorMsg: isValidEkapeNo(a.animalNumber)
         ? undefined
@@ -225,6 +232,7 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
 
 // ── 개별 카드 (상태별 분기) ────────────────────────────────────────
 const CertCard: React.FC<{ cert: CertItem }> = ({ cert }) => {
+  const { animal } = cert;
   if (cert.status === 'loading') {
     return (
       <div className="bg-white rounded-xl shadow p-8 flex items-center gap-4">
@@ -289,6 +297,7 @@ const CertCard: React.FC<{ cert: CertItem }> = ({ cert }) => {
           // 첫 번째 issueItem에만 gradeInfo 표시 (API가 flatten 반환하므로)
           gradeRows={i === 0 ? gradeInfo : []}
           hasGradeError={hasGradeError}
+          animal={animal}
         />
       ))}
     </>
@@ -301,7 +310,8 @@ const CertificateDocument: React.FC<{
   issueItem: EkapeIssueItem;
   gradeRows: EkapeDetail[];
   hasGradeError: boolean;
-}> = ({ animalNo, issueItem, gradeRows, hasGradeError }) => {
+  animal: AnimalItem;
+}> = ({ animalNo, issueItem, gradeRows, hasGradeError, animal }) => {
   return (
     <div className="cert-page bg-white border border-gray-500 shadow-md p-6 text-xs">
 
@@ -447,6 +457,37 @@ const CertificateDocument: React.FC<{
           {gradeRows[0]?.inspecPlcNm !== undefined && (
             <InfoRow label="판정장" value={str(gradeRows[0].inspecPlcNm)} />
           )}
+        </div>
+      )}
+
+      {/* ── 납품내역 ── */}
+      {(animal.destination || animal.cutName || animal.weightKg) && (
+        <div className="mb-3">
+          <p className="text-xs font-semibold text-gray-700 mb-1.5 tracking-wide">납 품 내 역</p>
+          <table className="w-full border-collapse text-xs text-center">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border border-gray-400 px-2 py-1.5">업태유형</th>
+                <th className="border border-gray-400 px-2 py-1.5">납품처명</th>
+                <th className="border border-gray-400 px-2 py-1.5">부위명</th>
+                <th className="border border-gray-400 px-2 py-1.5">중량(kg)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="border border-gray-300 px-2 py-1.5">—</td>
+                <td className="border border-gray-300 px-2 py-1.5 font-medium">
+                  {animal.destination ?? '—'}
+                </td>
+                <td className="border border-gray-300 px-2 py-1.5">
+                  {[animal.cutName, animal.processingType].filter(Boolean).join(' / ') || '—'}
+                </td>
+                <td className="border border-gray-300 px-2 py-1.5">
+                  {animal.weightKg ?? '—'}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
 
