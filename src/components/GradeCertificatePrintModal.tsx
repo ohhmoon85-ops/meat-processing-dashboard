@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { X, Printer, Loader2, AlertTriangle, FileText } from 'lucide-react';
+import type { BusinessInfo } from './SettingsModal';
 
 // ── 타입 ──────────────────────────────────────────────────────────
 interface AnimalItem {
@@ -58,6 +59,7 @@ interface CertItem {
 
 interface Props {
   animals: AnimalItem[];
+  businessInfo?: BusinessInfo;
   onClose: () => void;
 }
 
@@ -77,7 +79,7 @@ const str = (v: unknown): string => {
 };
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────
-const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
+const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, onClose }) => {
   const [certs, setCerts] = useState<CertItem[]>(() =>
     animals.map((a) => ({
       animalNo: a.animalNumber,
@@ -267,7 +269,7 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
         <div id="cert-cards-container" className="flex-1 overflow-y-auto p-6 bg-gray-100 print:p-0 print:bg-white">
           <div className="max-w-5xl mx-auto flex flex-col gap-6 print:gap-0">
             {certs.map((cert, idx) => (
-              <CertCard key={idx} cert={cert} />
+              <CertCard key={idx} cert={cert} businessInfo={businessInfo} />
             ))}
           </div>
         </div>
@@ -277,7 +279,7 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
 };
 
 // ── 개별 카드 (상태별 분기) ────────────────────────────────────────
-const CertCard: React.FC<{ cert: CertItem }> = ({ cert }) => {
+const CertCard: React.FC<{ cert: CertItem; businessInfo?: BusinessInfo }> = ({ cert, businessInfo }) => {
   const { animal } = cert;
   if (cert.status === 'loading') {
     return (
@@ -344,6 +346,7 @@ const CertCard: React.FC<{ cert: CertItem }> = ({ cert }) => {
           gradeRows={i === 0 ? gradeInfo : []}
           hasGradeError={hasGradeError}
           animal={animal}
+          businessInfo={businessInfo}
         />
       ))}
     </>
@@ -365,7 +368,8 @@ const CertificateDocument: React.FC<{
   gradeRows: EkapeDetail[];
   hasGradeError: boolean;
   animal: AnimalItem;
-}> = ({ animalNo, issueItem, gradeRows, hasGradeError, animal }) => {
+  businessInfo?: BusinessInfo;
+}> = ({ animalNo, issueItem, gradeRows, hasGradeError, animal, businessInfo }) => {
 
   const gi           = gradeRows[0] ?? {};
   const issueNo      = str(issueItem.issueNo);
@@ -436,7 +440,7 @@ const CertificateDocument: React.FC<{
         <div>성명 :&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</div>
       </div>
 
-      {/* ⑤ 신청인 정보 (업체 자체 정보 — 빈칸으로 인쇄 후 수기 기재) */}
+      {/* ⑤ 신청인 정보 */}
       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '3px', fontSize: '10px' }}>
         <tbody>
           <tr>
@@ -444,19 +448,19 @@ const CertificateDocument: React.FC<{
               width: '32px', background: '#f5f5f5', fontWeight: 'bold', writingMode: 'vertical-rl',
               letterSpacing: '4px' }}>신청인</td>
             <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5', width: '42px' }}>성&nbsp;&nbsp;&nbsp;명</td>
-            <td style={{ border: '1px solid #333', padding: '3px 6px', width: '120px' }}>&nbsp;</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', width: '120px' }}>{businessInfo?.name || '\u00a0'}</td>
             <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5', width: '110px' }}>생년월일(사업자등록번호)</td>
-            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>{businessInfo?.bizNo || '\u00a0'}</td>
           </tr>
           <tr>
             <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5' }}>업소명</td>
-            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>{businessInfo?.bizName || '\u00a0'}</td>
             <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5' }}>업태유형</td>
-            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>{businessInfo?.bizType || '\u00a0'}</td>
           </tr>
           <tr>
             <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5' }}>주&nbsp;&nbsp;&nbsp;소</td>
-            <td colSpan={3} style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+            <td colSpan={3} style={{ border: '1px solid #333', padding: '3px 6px' }}>{businessInfo?.address || '\u00a0'}</td>
           </tr>
         </tbody>
       </table>
