@@ -65,18 +65,30 @@ const Dashboard: React.FC = () => {
 
   // ── 개체번호 추가 (중복 제거 포함) ────────────────────────────
   const addAnimals = (newItems: Omit<AnimalData, 'id' | 'selected'>[]) => {
-    const existingNumbers = new Set(animalList.map((a) => a.animalNumber));
+    // 중복 판단: 이력번호 + 납품처 + 부위명 + 가공형태 + 중량 조합
+    // 같은 이력번호라도 납품처/부위가 다르면 별도 행으로 추가
+    const rowKey = (item: Omit<AnimalData, 'id' | 'selected'>) =>
+      [
+        item.animalNumber,
+        item.destination ?? '',
+        item.cutName ?? '',
+        item.processingType ?? '',
+        item.weightKg ?? '',
+      ].join('|');
+
+    const existingKeys = new Set(animalList.map(rowKey));
     let nextId = Math.max(0, ...animalList.map((a) => a.id)) + 1;
 
     const added: AnimalData[] = [];
     let duplicateCount = 0;
 
     for (const item of newItems) {
-      if (existingNumbers.has(item.animalNumber)) {
+      const k = rowKey(item);
+      if (existingKeys.has(k)) {
         duplicateCount++;
       } else {
         added.push({ ...item, id: nextId++, selected: false });
-        existingNumbers.add(item.animalNumber);
+        existingKeys.add(k);
       }
     }
 

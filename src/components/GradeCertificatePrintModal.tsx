@@ -90,42 +90,47 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
   );
   const [isPrinting, setIsPrinting] = useState(false);
 
-  // ── 마운트 시 병렬 API 조회 ──────────────────────────────────────
+  // ── 마운트 시 병렬 API 조회 (같은 이력번호는 1회만 호출) ─────────
   useEffect(() => {
     const fetchAll = async () => {
+      // 유효한 이력번호만 추출 → 중복 제거 → API 1회 호출 후 결과 공유
+      const uniqueNos = [
+        ...new Set(
+          animals
+            .map((a) => a.animalNumber.replace(/[-\s]/g, ''))
+            .filter((no) => isValidEkapeNo(no))
+        ),
+      ];
+
+      // 이력번호 → API 결과 캐시
+      const cache = new Map<string, { ok: boolean; json: unknown }>();
       await Promise.all(
-        animals.map(async (animal, idx) => {
-          if (!isValidEkapeNo(animal.animalNumber)) return;
-          const cleanNo = animal.animalNumber.replace(/[-\s]/g, '');
+        uniqueNos.map(async (cleanNo) => {
           try {
             const res = await fetch(`/api/grade-certificate?animalNo=${encodeURIComponent(cleanNo)}`);
             const json = await res.json();
-            if (!res.ok) {
-              setCerts((prev) =>
-                prev.map((c, i) =>
-                  i === idx ? { ...c, status: 'error', errorMsg: json.error ?? '조회 실패' } : c
-                )
-              );
-              return;
-            }
-            setCerts((prev) =>
-              prev.map((c, i) =>
-                i === idx ? { ...c, status: 'success', data: json as EkapeResult } : c
-              )
-            );
+            cache.set(cleanNo, { ok: res.ok, json });
           } catch (err) {
-            setCerts((prev) =>
-              prev.map((c, i) =>
-                i === idx
-                  ? {
-                      ...c,
-                      status: 'error',
-                      errorMsg: err instanceof Error ? err.message : '네트워크 오류',
-                    }
-                  : c
-              )
-            );
+            cache.set(cleanNo, {
+              ok: false,
+              json: { error: err instanceof Error ? err.message : '네트워크 오류' },
+            });
           }
+        })
+      );
+
+      // 캐시 결과를 각 cert 항목에 반영
+      setCerts((prev) =>
+        prev.map((c) => {
+          if (c.status === 'skipped') return c;
+          const cleanNo = c.animalNo.replace(/[-\s]/g, '');
+          const result = cache.get(cleanNo);
+          if (!result) return c;
+          if (!result.ok) {
+            const errJson = result.json as { error?: string };
+            return { ...c, status: 'error', errorMsg: errJson.error ?? '조회 실패' };
+          }
+          return { ...c, status: 'success', data: result.json as EkapeResult };
         })
       );
     };
