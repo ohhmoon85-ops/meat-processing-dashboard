@@ -150,6 +150,8 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
     <>
       {/* ── 인쇄 전용 CSS ── */}
       <style>{`
+        @page { size: A4 portrait; margin: 10mm; }
+
         @media print {
           /*
            * visibility 방식: display:none 으로 #root 를 통째로 숨기면
@@ -454,21 +456,21 @@ const CertificateDocument: React.FC<{
       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '3px', fontSize: '10px' }}>
         <tbody>
           <tr>
-            <td rowSpan={3} style={{ ...tdH, padding: '3px 5px', textAlign: 'center', width: '32px',
+            <td rowSpan={3} style={{ ...tdH, padding: '3px 5px', textAlign: 'center', width: '28px',
               fontWeight: 'bold', writingMode: 'vertical-rl', letterSpacing: '4px' }}>신청인</td>
-            <td style={{ ...tdH, padding: '3px 6px', width: '42px' }}>성&nbsp;&nbsp;&nbsp;명</td>
-            <td style={{ ...td,  padding: '3px 6px', width: '120px' }}>{businessInfo?.name || '\u00a0'}</td>
-            <td style={{ ...tdH, padding: '3px 6px', width: '110px' }}>생년월일(사업자등록번호)</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>성&nbsp;&nbsp;&nbsp;명</td>
+            <td style={{ ...td,  padding: '3px 6px', width: '22%' }}>{businessInfo?.name || '\u00a0'}</td>
+            <td style={{ ...tdH, padding: '3px 4px', whiteSpace: 'nowrap', fontSize: '9px' }}>생년월일(사업자등록번호)</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizNo || '\u00a0'}</td>
           </tr>
           <tr>
-            <td style={{ ...tdH, padding: '3px 6px' }}>업소명</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업&nbsp;&nbsp;소&nbsp;&nbsp;명</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizName || '\u00a0'}</td>
-            <td style={{ ...tdH, padding: '3px 6px' }}>업태유형</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업태유형</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizType || '\u00a0'}</td>
           </tr>
           <tr>
-            <td style={{ ...tdH, padding: '3px 6px' }}>주&nbsp;&nbsp;&nbsp;소</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소</td>
             <td colSpan={3} style={{ ...td, padding: '3px 6px' }}>{businessInfo?.address || '\u00a0'}</td>
           </tr>
         </tbody>
@@ -492,19 +494,26 @@ const CertificateDocument: React.FC<{
         </tbody>
       </table>
 
-      {/* ⑦ 도체 등급 테이블 */}
+      {/* ⑦ 도체 등급 테이블 — 2행 헤더: 상단 "등급" 병합 + 하단 육질/육량 */}
       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '2px',
         fontSize: '10px', textAlign: 'center' }}>
-        <tbody>
-          <tr style={{ background: '#f0f0f0' }}>
-            <th style={{ ...td, padding: '3px 4px' }}>도체번호</th>
-            <th style={{ ...td, padding: '3px 4px' }}>이력번호</th>
-            <th style={{ ...td, padding: '3px 4px' }}>품종</th>
-            <th style={{ ...td, padding: '3px 4px' }}>성별</th>
-            <th style={{ ...td, padding: '3px 4px' }}>중량</th>
-            <th style={{ ...td, padding: '3px 4px' }}>육질(근내지방도)</th>
-            <th style={{ ...td, padding: '3px 4px' }}>육량(등지방두께)</th>
+        <thead style={{ background: '#f0f0f0' }}>
+          {/* 1행: 도체번호·이력번호·품종·성별·중량(rowspan=2) + 등급(colspan=2) */}
+          <tr>
+            <th rowSpan={2} style={{ ...td, padding: '3px 4px' }}>도체번호</th>
+            <th rowSpan={2} style={{ ...td, padding: '3px 4px' }}>이력번호</th>
+            <th rowSpan={2} style={{ ...td, padding: '3px 4px' }}>품종</th>
+            <th rowSpan={2} style={{ ...td, padding: '3px 4px' }}>성별</th>
+            <th rowSpan={2} style={{ ...td, padding: '3px 4px' }}>중량</th>
+            <th colSpan={2} style={{ ...td, padding: '2px 4px', fontWeight: 'bold' }}>등급</th>
           </tr>
+          {/* 2행: 육질·육량 세부 헤더 */}
+          <tr>
+            <th style={{ ...td, padding: '2px 4px' }}>육질(근내지방도)</th>
+            <th style={{ ...td, padding: '2px 4px' }}>육량(등지방두께)</th>
+          </tr>
+        </thead>
+        <tbody>
           {gradeRows.length > 0 ? (
             gradeRows.map((row, i) => {
               const rCarcassNo = str(row.carcassNo ?? row.inspecNo);
@@ -517,34 +526,35 @@ const CertificateDocument: React.FC<{
               const rBackfat   = str(row.backfatThick);
               return (
                 <tr key={i}>
-                  <td style={{ ...td, padding: '8px 4px', fontWeight: 'bold', fontSize: '18px' }}>{rCarcassNo}</td>
-                  <td style={{ ...td, padding: '8px 4px', fontFamily: 'monospace', fontSize: '11px' }}>{fmtAnimalNo(animalNo)}</td>
-                  <td style={{ ...td, padding: '8px 4px' }}>{rBreed}</td>
-                  <td style={{ ...td, padding: '8px 4px' }}>{rSex}</td>
-                  <td style={{ ...td, padding: '8px 4px' }}>{rWeight}</td>
-                  <td style={{ ...td, padding: '8px 4px', fontWeight: 'bold' }}>{rQul}{rMarble ? `(${rMarble})` : ''}</td>
-                  <td style={{ ...td, padding: '8px 4px', fontWeight: 'bold' }}>{rYield}{rBackfat ? `(${rBackfat})` : ''}</td>
+                  <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '22px' }}>{rCarcassNo}</td>
+                  <td style={{ ...td, padding: '12px 4px', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '2px' }}>{fmtAnimalNo(animalNo)}</td>
+                  <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{rBreed}</td>
+                  <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{rSex}</td>
+                  <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{rWeight}</td>
+                  <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{rQul}{rMarble ? `(${rMarble})` : ''}</td>
+                  <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{rYield}{rBackfat ? `(${rBackfat})` : ''}</td>
                 </tr>
               );
             })
           ) : (
             <tr>
-              <td style={{ ...td, padding: '8px 4px', fontWeight: 'bold', fontSize: '18px' }}>&nbsp;</td>
-              <td style={{ ...td, padding: '8px 4px', fontFamily: 'monospace', fontSize: '11px' }}>{fmtAnimalNo(animalNo)}</td>
-              <td style={{ ...td, padding: '8px 4px' }}>{breedNm || '\u00a0'}</td>
-              <td style={{ ...td, padding: '8px 4px' }}>{sexDisplay || '\u00a0'}</td>
-              <td style={{ ...td, padding: '8px 4px' }}>{carcassWt || '\u00a0'}</td>
-              <td style={{ ...td, padding: '8px 4px' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
-              <td style={{ ...td, padding: '8px 4px' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
+              <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '22px' }}>&nbsp;</td>
+              <td style={{ ...td, padding: '12px 4px', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '2px' }}>{fmtAnimalNo(animalNo)}</td>
+              <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{breedNm || '\u00a0'}</td>
+              <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{sexDisplay || '\u00a0'}</td>
+              <td style={{ ...td, padding: '12px 4px', fontSize: '12px' }}>{carcassWt || '\u00a0'}</td>
+              <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
+              <td style={{ ...td, padding: '12px 4px', fontWeight: 'bold', fontSize: '14px' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
             </tr>
           )}
-          {/* 계 행 */}
-          <tr style={{ background: '#f8f8f8' }}>
-            <td colSpan={7} style={{ ...td, padding: '3px 8px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px' }}>
+        </tbody>
+        <tfoot>
+          <tr style={{ background: '#f0f0f0' }}>
+            <td colSpan={7} style={{ ...td, padding: '5px 8px', textAlign: 'center', fontWeight: 'bold', fontSize: '16px' }}>
               계 : 壹두
             </td>
           </tr>
-        </tbody>
+        </tfoot>
       </table>
 
       {/* ⑧ 육질등급 주석 */}
