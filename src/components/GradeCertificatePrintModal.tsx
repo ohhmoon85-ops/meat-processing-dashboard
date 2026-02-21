@@ -420,18 +420,19 @@ const CertificateDocument: React.FC<{
       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '3px' }}>
         <tbody>
           <tr>
-            <td style={{ width: '60%', padding: '4px 8px', verticalAlign: 'top', borderRight: '1px solid #333' }}>
-              <div style={{ fontSize: '9px', color: '#555' }}>발급번호 :&nbsp;
-                <span style={{ fontWeight: 'bold', color: '#000', fontSize: '11px' }}>{issueNo}</span>
-              </div>
-              <div style={{ textAlign: 'center', margin: '6px 0 2px' }}>
-                <span style={{ fontSize: '16px', fontWeight: 'bold', letterSpacing: '2px' }}>
+            <td style={{ width: '72%', padding: '6px 12px', verticalAlign: 'middle', borderRight: '1px solid #333' }}>
+              <div style={{ textAlign: 'center', marginBottom: '5px' }}>
+                <span style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '3px' }}>
                   축산물 (소) 등급판정확인서
                 </span>
               </div>
+              <div style={{ textAlign: 'center', fontSize: '10px', color: '#333' }}>
+                발급번호 :&nbsp;
+                <span style={{ fontWeight: 'bold', color: '#000', fontSize: '14px' }}>{issueNo}</span>
+              </div>
             </td>
-            <td style={{ width: '40%', padding: '4px 8px', verticalAlign: 'top' }}>
-              <div style={{ width: '60px', height: '60px', border: '1px solid #aaa', float: 'right',
+            <td style={{ width: '28%', padding: '6px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
+              <div style={{ width: '68px', height: '68px', border: '1px solid #aaa', margin: '0 auto',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#aaa' }}>
                 QR
               </div>
@@ -458,19 +459,19 @@ const CertificateDocument: React.FC<{
           <tr>
             <td rowSpan={3} style={{ ...tdH, padding: '3px 5px', textAlign: 'center', width: '28px',
               fontWeight: 'bold', writingMode: 'vertical-rl', letterSpacing: '4px' }}>신청인</td>
-            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>성&nbsp;&nbsp;&nbsp;명</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>성&nbsp;&nbsp;명</td>
             <td style={{ ...td,  padding: '3px 6px', width: '22%' }}>{businessInfo?.name || '\u00a0'}</td>
             <td style={{ ...tdH, padding: '3px 4px', whiteSpace: 'nowrap', fontSize: '9px' }}>생년월일(사업자등록번호)</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizNo || '\u00a0'}</td>
           </tr>
           <tr>
-            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업&nbsp;&nbsp;소&nbsp;&nbsp;명</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업소명</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizName || '\u00a0'}</td>
             <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>업태유형</td>
             <td style={{ ...td,  padding: '3px 6px' }}>{businessInfo?.bizType || '\u00a0'}</td>
           </tr>
           <tr>
-            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소</td>
+            <td style={{ ...tdH, padding: '3px 6px', whiteSpace: 'nowrap' }}>주&nbsp;&nbsp;소</td>
             <td colSpan={3} style={{ ...td, padding: '3px 6px' }}>{businessInfo?.address || '\u00a0'}</td>
           </tr>
         </tbody>
