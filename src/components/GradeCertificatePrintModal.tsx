@@ -66,12 +66,6 @@ interface Props {
 // ── 헬퍼 ─────────────────────────────────────────────────────────
 const isValidEkapeNo = (no: string) => /^\d{12}$/.test(no.replace(/[-\s]/g, ''));
 
-const fmtDate = (v: unknown): string => {
-  const s = String(v ?? '').trim();
-  if (!s) return '—';
-  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
-  return s;
-};
 
 const str = (v: unknown): string => {
   const s = String(v ?? '').trim();
@@ -379,7 +373,6 @@ const CertificateDocument: React.FC<{
   const sexNm        = str(issueItem.judgeSexNm ?? issueItem.sexNm);
 
   // 도체번호, 품종, 중량, 육질, 육량 — step 2 데이터 우선, 없으면 공란
-  const carcassNo    = gradeRows.length > 0 ? str(gi.carcassNo ?? gi.inspecNo)    : '';
   const breedNm      = gradeRows.length > 0 ? str(gi.breedNm ?? gi.liveStockNm)   : '';
   const carcassWt    = gradeRows.length > 0 ? str(gi.carcassWeight)               : '';
   const qulGrade     = gradeRows.length > 0 ? str(gi.qulGradeNm ?? gi.gradeNm)   : '';
