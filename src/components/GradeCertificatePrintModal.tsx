@@ -350,7 +350,15 @@ const CertCard: React.FC<{ cert: CertItem }> = ({ cert }) => {
   );
 };
 
-// ── 공식 확인서 문서 레이아웃 ─────────────────────────────────────
+// ── 날짜 포맷: YYYYMMDD 또는 YYYY-MM-DD → YYYY년 MM월 DD일 ────────
+const fmtDateKo = (v: unknown): string => {
+  const s = String(v ?? '').trim().replace(/-/g, '');
+  if (/^\d{8}$/.test(s))
+    return `${s.slice(0, 4)}년 ${s.slice(4, 6)}월 ${s.slice(6, 8)}일`;
+  return s || '';
+};
+
+// ── 공식 서식: 축산법 시행규칙 [별지 제 43호 서식] ────────────────
 const CertificateDocument: React.FC<{
   animalNo: string;
   issueItem: EkapeIssueItem;
@@ -358,199 +366,222 @@ const CertificateDocument: React.FC<{
   hasGradeError: boolean;
   animal: AnimalItem;
 }> = ({ animalNo, issueItem, gradeRows, hasGradeError, animal }) => {
+
+  const gi           = gradeRows[0] ?? {};
+  const issueNo      = str(issueItem.issueNo);
+  const issueDate    = fmtDateKo(issueItem.issueDate);
+  const judgeDate    = fmtDateKo(issueItem.judgeDate);
+  const abattNm      = str(issueItem.abattNm ?? issueItem.butchPlcNm);
+  const sexNm        = str(issueItem.judgeSexNm ?? issueItem.sexNm);
+
+  // 도체번호, 품종, 중량, 육질, 육량 — step 2 데이터 우선, 없으면 공란
+  const carcassNo    = gradeRows.length > 0 ? str(gi.carcassNo ?? gi.inspecNo)    : '';
+  const breedNm      = gradeRows.length > 0 ? str(gi.breedNm ?? gi.liveStockNm)   : '';
+  const carcassWt    = gradeRows.length > 0 ? str(gi.carcassWeight)               : '';
+  const qulGrade     = gradeRows.length > 0 ? str(gi.qulGradeNm ?? gi.gradeNm)   : '';
+  const marble       = gradeRows.length > 0 ? str(gi.marbleScore)                 : '';
+  const yieldGrade   = gradeRows.length > 0 ? str(gi.yieldGradeNm)               : '';
+  const backfat      = gradeRows.length > 0 ? str(gi.backfatThick)               : '';
+  const sexDisplay   = gradeRows.length > 0 ? str(gi.sexNm ?? issueItem.judgeSexNm) : sexNm;
+
+  // 납품내역
+  const hasDelvInfo  = !!(animal.destination || animal.cutName || animal.weightKg);
+  const delvPart     = [animal.cutName, animal.processingType].filter(Boolean).join(' / ');
+
+  // step 2 미승인 안내 (인쇄 시에는 작은 회색 텍스트로만 표시)
+  const pendingNote  = hasGradeError && gradeRows.length === 0;
+
   return (
-    <div className="cert-page bg-white border border-gray-500 shadow-md p-6 text-xs">
+    <div className="cert-page bg-white p-4" style={{ fontSize: '10px', fontFamily: 'sans-serif', lineHeight: '1.4' }}>
 
-      {/* ── 문서 헤더 ── */}
-      <div className="flex items-start justify-between mb-1">
-        <div className="text-gray-500 min-w-[160px]">
-          발급번호: <span className="text-gray-800 font-medium">{str(issueItem.issueNo)}</span>
-        </div>
-        <div className="text-center flex-1 px-2">
-          <h1 className="text-base font-bold tracking-widest text-black">
-            축산물 (소) 등급판정확인서
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">축산물품질평가원</p>
-        </div>
-        <div className="text-gray-500 min-w-[160px] text-right">
-          발급일: <span className="text-gray-800 font-medium">{fmtDate(issueItem.issueDate)}</span>
-        </div>
+      {/* ① 서식 번호 줄 */}
+      <div style={{ fontSize: '9px', color: '#555', marginBottom: '3px' }}>
+        축산법 시행규칙 [별지 제 43호 서식] (개정 2018. 12. 27.)&nbsp;&nbsp;(열람용)
       </div>
 
-      <hr className="border-gray-400 my-2" />
+      {/* ② 발급번호 + 제목 + QR 영역 */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '3px' }}>
+        <tbody>
+          <tr>
+            <td style={{ width: '60%', padding: '4px 8px', verticalAlign: 'top', borderRight: '1px solid #333' }}>
+              <div style={{ fontSize: '9px', color: '#555' }}>발급번호 :&nbsp;
+                <span style={{ fontWeight: 'bold', color: '#000', fontSize: '11px' }}>{issueNo}</span>
+              </div>
+              <div style={{ textAlign: 'center', margin: '6px 0 2px' }}>
+                <span style={{ fontSize: '16px', fontWeight: 'bold', letterSpacing: '2px' }}>
+                  축산물 (소) 등급판정확인서
+                </span>
+              </div>
+            </td>
+            <td style={{ width: '40%', padding: '4px 8px', verticalAlign: 'top' }}>
+              {/* QR 코드 자리 (실물 확인서에만 있음) */}
+              <div style={{ width: '60px', height: '60px', border: '1px solid #aaa', float: 'right',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#aaa' }}>
+                QR
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      {/* ── 기본 정보 (Step 1 데이터) ── */}
-      <div className="border border-gray-300 rounded p-3 mb-3 grid grid-cols-3 gap-x-6 gap-y-1.5 text-xs">
-        <InfoRow label="이력번호" value={<span className="font-mono font-semibold">{animalNo}</span>} />
-        <InfoRow label="도축장명" value={str(issueItem.abattNm ?? issueItem.butchPlcNm)} />
-        <InfoRow label="도축일자" value={fmtDate(issueItem.abattDate ?? issueItem.butchYmd)} />
-        <InfoRow label="판정종류" value={str(issueItem.judgeKindNm)} />
-        <InfoRow label="등급판정일" value={fmtDate(issueItem.judgeDate)} />
-        <InfoRow label="성별" value={str(issueItem.judgeSexNm ?? issueItem.sexNm)} />
+      {/* ③ 법령 인용문 */}
+      <div style={{ fontSize: '9px', marginBottom: '3px' }}>
+        「축산법」제40조 및 같은 법 시행규칙 제45조제1항에 따라 등급판정 결과를 아래와 같이 확인합니다.
       </div>
 
-      {/* ── 도체 등급 테이블 ── */}
-      <div className="overflow-x-auto mb-3">
-        <table className="w-full border-collapse text-center text-xs">
-          <thead>
-            {/* 1행: 구분 헤더 */}
-            <tr>
-              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>도체번호</th>
-              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>품종</th>
-              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>성별</th>
-              <th className="border border-gray-400 px-1 py-1.5 bg-gray-200" rowSpan={2}>
-                도체중<br />(kg)
-              </th>
-              <th
-                className="border border-gray-400 px-1 py-1"
-                colSpan={5}
-                style={{ background: '#dbeafe' }}
-              >
-                육 질 등 급
-              </th>
-              <th
-                className="border border-gray-400 px-1 py-1"
-                colSpan={4}
-                style={{ background: '#dcfce7' }}
-              >
-                육 량 등 급
-              </th>
-            </tr>
-            {/* 2행: 세부 컬럼 */}
-            <tr>
-              <th className="border border-gray-400 px-1 py-1 font-semibold" style={{ background: '#dbeafe' }}>등급</th>
-              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>
-                근내<br />지방도
-              </th>
-              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>육색</th>
-              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>지방색</th>
-              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dbeafe' }}>조직감</th>
-              <th className="border border-gray-400 px-1 py-1 font-semibold" style={{ background: '#dcfce7' }}>등급</th>
-              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dcfce7' }}>
-                등심단면적<br />(㎠)
-              </th>
-              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dcfce7' }}>
-                등지방두께<br />(mm)
-              </th>
-              <th className="border border-gray-400 px-1 py-1" style={{ background: '#dcfce7' }}>
-                육량<br />지수
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {gradeRows.length > 0 ? (
-              gradeRows.map((gi, i) => (
-                <tr key={i} className={i % 2 === 1 ? 'bg-gray-50' : ''}>
-                  <td className="border border-gray-300 px-1 py-1.5">
-                    {str(gi.carcassNo ?? gi.inspecNo)}
+      {/* ④ 발급일 + 평가사 서명 (우측 정렬) */}
+      <div style={{ textAlign: 'right', marginBottom: '4px', fontSize: '10px' }}>
+        <div>{issueDate}</div>
+        <div>축산물품질평가사 소속 :&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
+        <div>성명 :&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</div>
+      </div>
+
+      {/* ⑤ 신청인 정보 (업체 자체 정보 — 빈칸으로 인쇄 후 수기 기재) */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '3px', fontSize: '10px' }}>
+        <tbody>
+          <tr>
+            <td rowSpan={3} style={{ border: '1px solid #333', padding: '3px 5px', textAlign: 'center',
+              width: '32px', background: '#f5f5f5', fontWeight: 'bold', writingMode: 'vertical-rl',
+              letterSpacing: '4px' }}>신청인</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5', width: '42px' }}>성&nbsp;&nbsp;&nbsp;명</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', width: '120px' }}>&nbsp;</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5', width: '110px' }}>생년월일(사업자등록번호)</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+          </tr>
+          <tr>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5' }}>업소명</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5' }}>업태유형</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+          </tr>
+          <tr>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5' }}>주&nbsp;&nbsp;&nbsp;소</td>
+            <td colSpan={3} style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* ⑥ 도축장 정보 */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '3px', fontSize: '10px' }}>
+        <tbody>
+          <tr>
+            <td rowSpan={2} style={{ border: '1px solid #333', padding: '3px 5px', textAlign: 'center',
+              width: '32px', background: '#f5f5f5', fontWeight: 'bold', writingMode: 'vertical-rl',
+              letterSpacing: '4px' }}>도축장</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5', width: '42px' }}>업체명</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px' }}>{abattNm}</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5', width: '70px' }}>등급판정일자</td>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', width: '90px' }}>{judgeDate}</td>
+          </tr>
+          <tr>
+            <td style={{ border: '1px solid #333', padding: '3px 6px', background: '#f5f5f5' }}>소재지</td>
+            <td colSpan={3} style={{ border: '1px solid #333', padding: '3px 6px' }}>&nbsp;</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* ⑦ 도체 등급 테이블 */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '2px',
+        fontSize: '10px', textAlign: 'center' }}>
+        <thead>
+          <tr style={{ background: '#f0f0f0' }}>
+            <th style={{ border: '1px solid #333', padding: '3px 4px' }}>도체번호</th>
+            <th style={{ border: '1px solid #333', padding: '3px 4px' }}>이력번호</th>
+            <th style={{ border: '1px solid #333', padding: '3px 4px' }}>품종</th>
+            <th style={{ border: '1px solid #333', padding: '3px 4px' }}>성별</th>
+            <th style={{ border: '1px solid #333', padding: '3px 4px' }}>중량</th>
+            <th style={{ border: '1px solid #333', padding: '3px 4px' }}>육질(근내지방도)</th>
+            <th style={{ border: '1px solid #333', padding: '3px 4px' }}>육량(등지방두께)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {gradeRows.length > 0 ? (
+            gradeRows.map((row, i) => {
+              const rCarcassNo  = str(row.carcassNo ?? row.inspecNo);
+              const rBreed      = str(row.breedNm ?? row.liveStockNm);
+              const rSex        = str(row.sexNm ?? issueItem.judgeSexNm);
+              const rWeight     = str(row.carcassWeight);
+              const rQul        = str(row.qulGradeNm ?? row.gradeNm);
+              const rMarble     = str(row.marbleScore);
+              const rYield      = str(row.yieldGradeNm);
+              const rBackfat    = str(row.backfatThick);
+              return (
+                <tr key={i}>
+                  <td style={{ border: '1px solid #333', padding: '6px 4px', fontWeight: 'bold', fontSize: '14px' }}>{rCarcassNo}</td>
+                  <td style={{ border: '1px solid #333', padding: '6px 4px', fontFamily: 'monospace' }}>{animalNo}</td>
+                  <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{rBreed}</td>
+                  <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{rSex}</td>
+                  <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{rWeight}</td>
+                  <td style={{ border: '1px solid #333', padding: '6px 4px', fontWeight: 'bold' }}>
+                    {rQul}{rMarble ? `(${rMarble})` : ''}
                   </td>
-                  <td className="border border-gray-300 px-1 py-1.5">
-                    {str(gi.breedNm ?? gi.liveStockNm)}
+                  <td style={{ border: '1px solid #333', padding: '6px 4px', fontWeight: 'bold' }}>
+                    {rYield}{rBackfat ? `(${rBackfat})` : ''}
                   </td>
-                  <td className="border border-gray-300 px-1 py-1.5">
-                    {str(gi.sexNm ?? issueItem.judgeSexNm)}
-                  </td>
-                  <td className="border border-gray-300 px-1 py-1.5">
-                    {str(gi.carcassWeight)}
-                  </td>
-                  {/* 육질등급 */}
-                  <td className="border border-gray-300 px-1 py-1.5 font-bold text-blue-800">
-                    {str(gi.qulGradeNm ?? gi.gradeNm)}
-                  </td>
-                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.marbleScore)}</td>
-                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.meatColorScore)}</td>
-                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.fatColorScore)}</td>
-                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.textureScore)}</td>
-                  {/* 육량등급 */}
-                  <td className="border border-gray-300 px-1 py-1.5 font-bold text-green-800">
-                    {str(gi.yieldGradeNm)}
-                  </td>
-                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.longissimus)}</td>
-                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.backfatThick)}</td>
-                  <td className="border border-gray-300 px-1 py-1.5">{str(gi.yieldIndex)}</td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td
-                  className="border border-gray-300 px-2 py-4 text-center"
-                  colSpan={13}
-                >
-                  {hasGradeError ? (
-                    <p className="text-orange-600 font-medium">
-                      ⚠ 소도체 상세 정보 조회 권한 미승인 —
-                      EKAPE API 권한 획득 후 자동으로 표시됩니다
-                    </p>
-                  ) : (
-                    <span className="text-gray-400">등급판정 상세 정보 없음</span>
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              );
+            })
+          ) : (
+            <tr>
+              <td style={{ border: '1px solid #333', padding: '6px 4px', fontWeight: 'bold', fontSize: '14px' }}>&nbsp;</td>
+              <td style={{ border: '1px solid #333', padding: '6px 4px', fontFamily: 'monospace' }}>{animalNo}</td>
+              <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{breedNm || '\u00a0'}</td>
+              <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{sexDisplay || '\u00a0'}</td>
+              <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{carcassWt || '\u00a0'}</td>
+              <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
+              <td style={{ border: '1px solid #333', padding: '6px 4px' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
+            </tr>
+          )}
+        </tbody>
+        <tfoot>
+          <tr style={{ background: '#f8f8f8' }}>
+            <td colSpan={7} style={{ border: '1px solid #333', padding: '3px 8px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px' }}>
+              계 : 흑두
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* ⑧ 육질등급 주석 */}
+      <div style={{ fontSize: '9px', color: '#444', marginBottom: '4px' }}>
+        ※ 쇠고기 육질등급은 1++, 1+, 1, 2, 3 등 외 등급(6단계)으로 구분됩니다.
       </div>
 
-      {/* ── 보조 정보 행 (gradeRows 있을 때만) ── */}
-      {gradeRows.length > 0 && (
-        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600 mb-3 px-1">
-          {gradeRows[0]?.maturityScore !== undefined && (
-            <InfoRow label="성숙도" value={str(gradeRows[0].maturityScore)} />
-          )}
-          {gradeRows[0]?.surfaceFatScore !== undefined && (
-            <InfoRow label="표면지방색" value={str(gradeRows[0].surfaceFatScore)} />
-          )}
-          {gradeRows[0]?.inspecPlcNm !== undefined && (
-            <InfoRow label="판정장" value={str(gradeRows[0].inspecPlcNm)} />
-          )}
+      {/* ⑨ step 2 미승인 안내 (인쇄 시 작은 글씨) */}
+      {pendingNote && (
+        <div style={{ fontSize: '9px', color: '#c05000', marginBottom: '4px' }}>
+          ※ 소도체 등급 상세(도체번호·품종·중량·육질·육량)는 EKAPE API 권한 획득 후 자동 표시됩니다.
         </div>
       )}
 
-      {/* ── 납품내역 ── */}
-      {(animal.destination || animal.cutName || animal.weightKg) && (
-        <div className="mb-3">
-          <p className="text-xs font-semibold text-gray-700 mb-1.5 tracking-wide">납 품 내 역</p>
-          <table className="w-full border-collapse text-xs text-center">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border border-gray-400 px-2 py-1.5">업태유형</th>
-                <th className="border border-gray-400 px-2 py-1.5">납품처명</th>
-                <th className="border border-gray-400 px-2 py-1.5">부위명</th>
-                <th className="border border-gray-400 px-2 py-1.5">중량(kg)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border border-gray-300 px-2 py-1.5">—</td>
-                <td className="border border-gray-300 px-2 py-1.5 font-medium">
-                  {animal.destination ?? '—'}
-                </td>
-                <td className="border border-gray-300 px-2 py-1.5">
-                  {[animal.cutName, animal.processingType].filter(Boolean).join(' / ') || '—'}
-                </td>
-                <td className="border border-gray-300 px-2 py-1.5">
-                  {animal.weightKg ?? '—'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── 하단 확인 문구 ── */}
-      <div className="border-t border-gray-300 pt-2 mt-3 text-center text-xs text-gray-500">
-        위와 같이 등급판정 결과를 확인합니다.
-      </div>
+      {/* ⑩ 납품내역 */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', fontSize: '10px' }}>
+        <thead>
+          <tr style={{ background: '#f0f0f0' }}>
+            <th rowSpan={2} style={{ border: '1px solid #333', padding: '3px 6px', textAlign: 'center', width: '50px' }}>납품내역</th>
+            <th style={{ border: '1px solid #333', padding: '3px 6px', textAlign: 'center' }}>업태유형</th>
+            <th style={{ border: '1px solid #333', padding: '3px 6px', textAlign: 'center' }}>납품처명</th>
+            <th style={{ border: '1px solid #333', padding: '3px 6px', textAlign: 'center' }}>부위명</th>
+            <th style={{ border: '1px solid #333', padding: '3px 6px', textAlign: 'center', width: '55px' }}>중량(kg)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{ border: '1px solid #333', padding: '4px 6px' }}>&nbsp;</td>
+            <td style={{ border: '1px solid #333', padding: '4px 6px', textAlign: 'center' }}>
+              {hasDelvInfo ? (animal.destination ?? '') : '\u00a0'}
+            </td>
+            <td style={{ border: '1px solid #333', padding: '4px 6px', textAlign: 'center' }}>
+              {hasDelvInfo ? delvPart : '\u00a0'}
+            </td>
+            <td style={{ border: '1px solid #333', padding: '4px 6px', textAlign: 'center' }}>
+              {hasDelvInfo ? (animal.weightKg ?? '') : '\u00a0'}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 };
-
-// ── 인라인 레이블-값 쌍 ───────────────────────────────────────────
-const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div className="flex gap-1 items-baseline">
-    <span className="text-gray-500 shrink-0">{label}:</span>
-    <span className="text-gray-800">{value}</span>
-  </div>
-);
 
 export default GradeCertificatePrintModal;
