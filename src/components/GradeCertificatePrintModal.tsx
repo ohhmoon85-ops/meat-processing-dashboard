@@ -155,13 +155,39 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
       {/* ── 인쇄 전용 CSS ── */}
       <style>{`
         @media print {
+          /* 모달 외 모든 요소 숨김 */
           body > *:not(#cert-print-root) { display: none !important; }
+
+          /* 모달 루트: fixed→static, 오버레이 배경 제거 */
           #cert-print-root {
             position: static !important;
             background: white !important;
             overflow: visible !important;
+            display: block !important;
+            height: auto !important;
+            inset: auto !important;
           }
+
+          /* 스크롤 컨테이너: overflow-y-auto 와 flex-1 높이 제약 해제 */
+          #cert-cards-container {
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            flex: none !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+
+          /* 확인서 내부 래퍼 */
+          #cert-cards-container > div {
+            max-width: none !important;
+            gap: 0 !important;
+          }
+
+          /* 헤더·진행바 숨김 */
           .no-print { display: none !important; }
+
+          /* 확인서 카드: 페이지 나누기 */
           .cert-page {
             break-after: page;
             border: 1px solid #555 !important;
@@ -223,7 +249,7 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, onClose }) => {
         )}
 
         {/* 확인서 목록 */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-100 print:p-0 print:bg-white">
+        <div id="cert-cards-container" className="flex-1 overflow-y-auto p-6 bg-gray-100 print:p-0 print:bg-white">
           <div className="max-w-5xl mx-auto flex flex-col gap-6 print:gap-0">
             {certs.map((cert, idx) => (
               <CertCard key={idx} cert={cert} />
