@@ -9,17 +9,20 @@ import { X, Save, Settings } from 'lucide-react';
 
 // ── 업체 정보 타입 (Dashboard · GradeCertificatePrintModal 공용) ─────────
 export interface BusinessInfo {
-  name: string;    // 성명
-  bizNo: string;   // 사업자등록번호 (생년월일 포함)
-  bizName: string; // 업소명
-  bizType: string; // 업태유형
-  address: string; // 주소
+  name: string;           // 성명
+  bizNo: string;          // 사업자등록번호 (생년월일 포함)
+  bizName: string;        // 업소명
+  bizType: string;        // 업태유형
+  address: string;        // 주소
+  evaluatorOrg: string;   // 축산물품질평가사 소속
+  evaluatorName: string;  // 축산물품질평가사 성명
 }
 
 export const BUSINESS_INFO_KEY = 'meatDashboard_businessInfo';
 
 export const emptyBusinessInfo = (): BusinessInfo => ({
   name: '', bizNo: '', bizName: '', bizType: '', address: '',
+  evaluatorOrg: '', evaluatorName: '',
 });
 
 export const loadBusinessInfo = (): BusinessInfo => {
@@ -143,6 +146,39 @@ const SettingsModal: React.FC<Props> = ({ initialInfo, onSave, onClose }) => {
               placeholder="충청북도 음성군 음성읍 ..."
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+          </div>
+
+          {/* 구분선 */}
+          <div className="border-t border-gray-200 pt-3">
+            <p className="text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              아래 정보는 <strong>축산물품질평가사</strong> 란에 자동으로 입력됩니다.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  축산물품질평가사 소속
+                </label>
+                <input
+                  type="text"
+                  value={form.evaluatorOrg}
+                  onChange={field('evaluatorOrg')}
+                  placeholder="서울지원"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  축산물품질평가사 성명
+                </label>
+                <input
+                  type="text"
+                  value={form.evaluatorName}
+                  onChange={field('evaluatorName')}
+                  placeholder="홍길동"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
           </div>
         </div>
 

@@ -473,8 +473,8 @@ const CertificateDocument: React.FC<{
       {/* ④ 발급일 + 평가사 서명 */}
       <div style={{ textAlign: 'right', marginBottom: '8px', fontSize: '10px', lineHeight: '1.9' }}>
         <div>{issueDate}</div>
-        <div>축산물품질평가사 소속 :&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</div>
-        <div>성명 :&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</div>
+        <div>축산물품질평가사 소속 :&nbsp;{businessInfo?.evaluatorOrg || '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0'}</div>
+        <div>성명 :&nbsp;{businessInfo?.evaluatorName || '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0'}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</div>
       </div>
 
       {/* ⑤ 신청인 정보 */}
@@ -550,33 +550,59 @@ const CertificateDocument: React.FC<{
                 const rMarble    = str(row.marbleScore);
                 const rYield     = str(row.yieldGradeNm);
                 const rBackfat   = str(row.backfatThick);
+                const editStyle: React.CSSProperties = { outline: 'none', minWidth: '20px', display: 'inline-block' };
                 return (
                   <tr key={i}>
-                    <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '44px', verticalAlign: 'middle' }}>{rCarcassNo}</td>
+                    <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '44px', verticalAlign: 'middle' }}>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{rCarcassNo !== '—' ? rCarcassNo : ''}</span>
+                    </td>
                     <td style={{ ...td, height: '70mm', verticalAlign: 'middle' }}>
                       <div style={{ fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', marginBottom: '10px' }}>{fmtAnimalNo(animalNo)}</div>
                       {barcode}
                     </td>
-                    <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>{rBreed}</td>
-                    <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>{rSex}</td>
-                    <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>{rWeight}</td>
-                    <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '20px', verticalAlign: 'middle' }}>{rQul}{rMarble ? `(${rMarble})` : ''}</td>
-                    <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '17px', verticalAlign: 'middle' }}>{rYield}{rBackfat ? `(${rBackfat})` : ''}</td>
+                    <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{rBreed !== '—' ? rBreed : ''}</span>
+                    </td>
+                    <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{rSex !== '—' ? rSex : ''}</span>
+                    </td>
+                    <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{rWeight !== '—' ? rWeight : ''}</span>
+                    </td>
+                    <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '20px', verticalAlign: 'middle' }}>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{(rQul !== '—' ? rQul : '') + (rMarble && rMarble !== '—' ? `(${rMarble})` : '')}</span>
+                    </td>
+                    <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '17px', verticalAlign: 'middle' }}>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{(rYield !== '—' ? rYield : '') + (rBackfat && rBackfat !== '—' ? `(${rBackfat})` : '')}</span>
+                    </td>
                   </tr>
                 );
               })
             ) : (
+              // EKAPE Step 2 미승인 — 셀을 직접 클릭해서 수동 입력 가능
               <tr>
-                <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '44px', verticalAlign: 'middle' }}>&nbsp;</td>
+                <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '44px', verticalAlign: 'middle' }}>
+                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>&nbsp;</span>
+                </td>
                 <td style={{ ...td, height: '70mm', verticalAlign: 'middle' }}>
                   <div style={{ fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', marginBottom: '10px' }}>{fmtAnimalNo(animalNo)}</div>
                   {barcode}
                 </td>
-                <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>{breedNm || '\u00a0'}</td>
-                <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>{sexDisplay || '\u00a0'}</td>
-                <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>{carcassWt || '\u00a0'}</td>
-                <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '20px', verticalAlign: 'middle' }}>{qulGrade && marble ? `${qulGrade}(${marble})` : '\u00a0'}</td>
-                <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '17px', verticalAlign: 'middle' }}>{yieldGrade && backfat ? `${yieldGrade}(${backfat})` : '\u00a0'}</td>
+                <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{breedNm !== '—' ? breedNm : ''}</span>
+                </td>
+                <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{sexDisplay !== '—' ? sexDisplay : ''}</span>
+                </td>
+                <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
+                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{carcassWt !== '—' ? carcassWt : ''}</span>
+                </td>
+                <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '20px', verticalAlign: 'middle' }}>
+                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{qulGrade && qulGrade !== '—' ? (marble && marble !== '—' ? `${qulGrade}(${marble})` : qulGrade) : ''}</span>
+                </td>
+                <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '17px', verticalAlign: 'middle' }}>
+                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{yieldGrade && yieldGrade !== '—' ? (backfat && backfat !== '—' ? `${yieldGrade}(${backfat})` : yieldGrade) : ''}</span>
+                </td>
               </tr>
             )}
           </tbody>
