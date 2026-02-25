@@ -2,10 +2,11 @@
  * 축산물 (소) 등급판정확인서 인쇄 모달
  *
  * - Step 1 (현재 작동): EKAPE issueNo API → 도축장·판정일·성별 등 기본 정보 표시
- * - Step 2 (권한 승인 후): EKAPE cattle API → 도체번호·품종·도체중·육질·육량 등급 표시
+ * - Step 2 (권한 승인됨): EKAPE cattle API → 도체번호·품종·도체중·육질·육량 등급 표시
+ * - 전자등록: 인쇄 시 mtrace 원패스 시스템에 출고 데이터 비동기 전송
  */
-import React, { useEffect, useState } from 'react';
-import { X, Printer, Loader2, AlertTriangle, FileText } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { X, Printer, Loader2, AlertTriangle, FileText, CheckCircle2, RefreshCw, Send } from 'lucide-react';
 import type { BusinessInfo } from './SettingsModal';
 
 // ── 타입 ──────────────────────────────────────────────────────────
@@ -14,11 +15,10 @@ interface AnimalItem {
   animalNumber: string;
   breed: string;
   birthDate: string;
-  // 바코드 납품 정보
-  destination?: string;    // 납품처명
-  cutName?: string;        // 부위명
-  processingType?: string; // 가공형태 (다짐, 슬라이스 등)
-  weightKg?: string;       // 중량(kg)
+  destination?: string;
+  cutName?: string;
+  processingType?: string;
+  weightKg?: string;
 }
 
 interface EkapeDetail {
@@ -54,7 +54,14 @@ interface CertItem {
   status: 'loading' | 'success' | 'error' | 'skipped';
   errorMsg?: string;
   data?: EkapeResult;
-  animal: AnimalItem; // 원본 동물 데이터 (납품 정보 포함)
+  animal: AnimalItem;
+}
+
+// ── 원패스 전자등록 상태 타입 ────────────────────────────────────
+type ShipmentStatus = 'idle' | 'sending' | 'success' | 'error' | 'unconfigured';
+interface ShipmentResult {
+  status: ShipmentStatus;
+  message?: string;
 }
 
 interface Props {
@@ -63,14 +70,58 @@ interface Props {
   onClose: () => void;
 }
 
+// ── 품종 코드 매핑 (EKAPE lsKindCd) ─────────────────────────────
+const LS_KIND_CODE_MAP: Record<string, string> = {
+  '01': '한우', '1': '한우',
+  '02': '육우', '2': '육우',
+  '03': '젖소', '3': '젖소',
+  '04': '돼지', '4': '돼지',
+  '05': '닭',   '5': '닭',
+  '06': '오리', '6': '오리',
+  '07': '말',   '7': '말',
+};
+
+/**
+ * EKAPE Step 2 품종 자동 판별
+ * 우선순위: lsKindCd(코드) > lsKindNm(종류명) > breedNm(품종명) 키워드
+ */
+function resolveBreed(row: EkapeDetail): string {
+  // 1. lsKindCd: 가장 신뢰할 수 있는 코드 기반 매핑
+  const code = String(row.lsKindCd ?? '').trim();
+  if (code && LS_KIND_CODE_MAP[code]) return LS_KIND_CODE_MAP[code];
+
+  // 2. lsKindNm: 가축종류명 직접 사용 (키워드 정규화)
+  const kindNm = String(row.lsKindNm ?? '').trim();
+  if (kindNm) {
+    if (kindNm.includes('한우')) return '한우';
+    if (kindNm.includes('육우')) return '육우';
+    if (kindNm.includes('젖소')) return '젖소';
+    if (kindNm.includes('교잡')) return '교잡우';
+    return kindNm;
+  }
+
+  // 3. breedNm / liveStockNm: 품종명 키워드 매칭
+  const breedNm = String(row.breedNm ?? row.liveStockNm ?? '').trim();
+  if (breedNm.includes('한우')) return '한우';
+  if (breedNm.includes('육우')) return '육우';
+  if (breedNm.includes('젖소') || breedNm.includes('홀스타인')) return '젖소';
+  if (breedNm.includes('교잡')) return '교잡우';
+  if (breedNm) return breedNm;
+
+  return '—';
+}
+
 // ── 헬퍼 ─────────────────────────────────────────────────────────
 const isValidEkapeNo = (no: string) => /^\d{12}$/.test(no.replace(/[-\s]/g, ''));
-
 
 const str = (v: unknown): string => {
   const s = String(v ?? '').trim();
   return s || '—';
 };
+
+/** 전자등록 결과 키: animalNo_issueNo */
+const shipKey = (animalNo: string, issueNo: unknown): string =>
+  `${animalNo.replace(/[-\s]/g, '')}_${String(issueNo ?? '')}`;
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────
 const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, onClose }) => {
@@ -85,11 +136,11 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
     }))
   );
   const [isPrinting, setIsPrinting] = useState(false);
+  const [shipmentResults, setShipmentResults] = useState<Record<string, ShipmentResult>>({});
 
-  // ── 마운트 시 병렬 API 조회 (같은 이력번호는 1회만 호출) ─────────
+  // ── 마운트 시 병렬 API 조회 ────────────────────────────────────
   useEffect(() => {
     const fetchAll = async () => {
-      // 유효한 이력번호만 추출 → 중복 제거 → API 1회 호출 후 결과 공유
       const uniqueNos = [
         ...new Set(
           animals
@@ -98,7 +149,6 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
         ),
       ];
 
-      // 이력번호 → API 결과 캐시
       const cache = new Map<string, { ok: boolean; json: unknown }>();
       await Promise.all(
         uniqueNos.map(async (cleanNo) => {
@@ -115,7 +165,6 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
         })
       );
 
-      // 캐시 결과를 각 cert 항목에 반영
       setCerts((prev) =>
         prev.map((c) => {
           if (c.status === 'skipped') return c;
@@ -133,9 +182,89 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
     void fetchAll();
   }, [animals]);
 
-  // ── 인쇄 ─────────────────────────────────────────────────────────
+  // ── 원패스 전자등록 단건 전송 ─────────────────────────────────
+  const callShipmentApi = useCallback(async (
+    animalNo: string,
+    issueItem: EkapeIssueItem,
+    gradeRow: EkapeDetail,
+  ) => {
+    const key = shipKey(animalNo, issueItem.issueNo);
+    setShipmentResults(prev => ({ ...prev, [key]: { status: 'sending' } }));
+
+    try {
+      const payload = {
+        animalNo:   animalNo.replace(/[-\s]/g, ''),
+        issueNo:    String(issueItem.issueNo   ?? ''),
+        carcassNo:  String(gradeRow.carcassNo  ?? gradeRow.inspecNo ?? ''),
+        breedNm:    resolveBreed(gradeRow),
+        sexNm:      String(gradeRow.sexNm      ?? issueItem.judgeSexNm ?? ''),
+        weight:     String(gradeRow.carcassWeight ?? ''),
+        qulGrade:   String(gradeRow.qulGradeNm ?? gradeRow.gradeNm    ?? ''),
+        yieldGrade: String(gradeRow.yieldGradeNm ?? ''),
+        judgeDate:  String(issueItem.judgeDate ?? '').replace(/-/g, ''),
+        abattNm:    String(issueItem.abattNm   ?? issueItem.butchPlcNm ?? ''),
+        compBizNo:  businessInfo?.bizNo   ?? '',
+        compNm:     businessInfo?.bizName ?? '',
+      };
+
+      const res = await fetch('/api/grade-shipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json() as {
+        success?: boolean;
+        error?: string;
+        resultMsg?: string;
+        configured?: boolean;
+      };
+
+      if (json.configured === false) {
+        // MTRACE 자격증명 미설정 — 기능 비활성화 상태로 표시
+        setShipmentResults(prev => ({
+          ...prev,
+          [key]: { status: 'unconfigured', message: 'MTRACE 자격증명 미설정 (환경변수 확인 필요)' },
+        }));
+      } else if (json.success) {
+        setShipmentResults(prev => ({
+          ...prev,
+          [key]: { status: 'success', message: json.resultMsg ?? '원패스 전자등록 완료' },
+        }));
+      } else {
+        setShipmentResults(prev => ({
+          ...prev,
+          [key]: { status: 'error', message: json.error ?? json.resultMsg ?? '전자등록 실패' },
+        }));
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '네트워크 오류';
+      setShipmentResults(prev => ({
+        ...prev,
+        [key]: { status: 'error', message: msg },
+      }));
+    }
+  }, [businessInfo]);
+
+  // ── 인쇄 + 전자등록 병렬 실행 ────────────────────────────────
   const handlePrint = () => {
     setIsPrinting(true);
+
+    // 원패스 전자등록: 인쇄와 병렬 비동기 실행 (인쇄를 차단하지 않음)
+    // 등록 실패 시에도 인쇄는 정상 진행됨
+    certs
+      .filter(c => c.status === 'success' && c.data)
+      .forEach(cert => {
+        const issueItems = cert.data!.items ?? [];
+        const gradeRows  = cert.data!.gradeInfo ?? [];
+        issueItems.forEach((issueItem, i) => {
+          void callShipmentApi(
+            cert.animalNo,
+            issueItem,
+            i === 0 ? (gradeRows[0] ?? {}) : {},
+          );
+        });
+      });
+
     setTimeout(() => {
       window.print();
       setIsPrinting(false);
@@ -146,6 +275,12 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
   const loaded   = certs.filter((c) => c.status !== 'loading').length;
   const succeeded = certs.filter((c) => c.status === 'success').length;
 
+  // 전자등록 전체 요약
+  const shipValues = Object.values(shipmentResults);
+  const shipSending = shipValues.filter(s => s.status === 'sending').length;
+  const shipOk      = shipValues.filter(s => s.status === 'success').length;
+  const shipErr     = shipValues.filter(s => s.status === 'error').length;
+
   return (
     <>
       {/* ── 인쇄 전용 CSS ── */}
@@ -153,39 +288,23 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
         @page { size: A4 portrait; margin: 10mm; }
 
         @media print {
-          /*
-           * visibility 방식: display:none 으로 #root 를 통째로 숨기면
-           * 그 안의 모달도 사라지기 때문에 visibility 를 사용한다.
-           * body 전체를 hidden 으로 만든 뒤 모달 내부만 visible 로 복원.
-           */
           body * { visibility: hidden !important; }
-
-          /* 모달 루트와 그 모든 자식을 visible 로 복원 */
           #cert-print-root,
           #cert-print-root * { visibility: visible !important; }
-
-          /* 헤더·진행바는 다시 숨김 (ID+class 으로 specificity 높임) */
           #cert-print-root .no-print {
             visibility: hidden !important;
             display: none !important;
             height: 0 !important;
           }
-
-          /* 모달 루트: absolute 로 전환해 문서 흐름에 삽입, 배경 흰색 */
           #cert-print-root {
             position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: auto !important;
-            width: 100% !important;
-            height: auto !important;
+            top: 0 !important; left: 0 !important;
+            right: 0 !important; bottom: auto !important;
+            width: 100% !important; height: auto !important;
             background: white !important;
             overflow: visible !important;
             display: block !important;
           }
-
-          /* 스크롤 컨테이너: flex-1·overflow-y-auto 높이 제약 해제 */
           #cert-cards-container {
             overflow: visible !important;
             height: auto !important;
@@ -194,36 +313,20 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
             padding: 0 !important;
             background: white !important;
           }
-
-          #cert-cards-container > div {
-            max-width: none !important;
-            gap: 0 !important;
-          }
-
-          /* 확인서 카드: A4 한 페이지 꽉 채우기 */
+          #cert-cards-container > div { max-width: none !important; gap: 0 !important; }
           .cert-page {
             break-after: page;
-            border: none !important;
-            box-shadow: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            min-height: 277mm !important;
-            box-sizing: border-box !important;
-            display: flex !important;
-            flex-direction: column !important;
+            border: none !important; box-shadow: none !important;
+            margin: 0 !important; padding: 0 !important;
+            min-height: 277mm !important; box-sizing: border-box !important;
+            display: flex !important; flex-direction: column !important;
           }
           .cert-page:last-child { break-after: auto; }
-          /* 도체 등급 영역: 남은 공간을 모두 차지 */
           .cert-grade-section {
-            flex: 1 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            min-height: 80mm !important;
+            flex: 1 !important; display: flex !important;
+            flex-direction: column !important; min-height: 80mm !important;
           }
-          .cert-grade-section > table {
-            flex: 1 !important;
-            height: 100% !important;
-          }
+          .cert-grade-section > table { flex: 1 !important; height: 100% !important; }
         }
       `}</style>
 
@@ -242,6 +345,17 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
                 {loaded < total
                   ? `조회 중... ${loaded} / ${total}`
                   : `${succeeded}건 조회 완료 (전체 ${total}건)`}
+                {shipValues.length > 0 && (
+                  <span className={`ml-3 font-medium ${
+                    shipErr   > 0 ? 'text-red-500' :
+                    shipSending > 0 ? 'text-blue-500' :
+                    shipOk    > 0 ? 'text-green-600' : ''
+                  }`}>
+                    {shipSending > 0 ? `· 전자등록 전송 중 (${shipSending}건)` : ''}
+                    {shipOk > 0 && shipSending === 0 ? `· 전자등록 완료 (${shipOk}건)` : ''}
+                    {shipErr > 0 ? `· 전자등록 오류 (${shipErr}건)` : ''}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -255,7 +369,7 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
                   : 'bg-blue-600 text-white hover:bg-blue-700'}`}
             >
               <Printer className="w-4 h-4" />
-              {isPrinting ? '인쇄 중...' : '인쇄'}
+              {isPrinting ? '인쇄 중...' : '인쇄 + 전자등록'}
             </button>
             <button
               onClick={onClose}
@@ -280,7 +394,13 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
         <div id="cert-cards-container" className="flex-1 overflow-y-auto p-6 bg-gray-100 print:p-0 print:bg-white">
           <div className="max-w-5xl mx-auto flex flex-col gap-6 print:gap-0">
             {certs.map((cert, idx) => (
-              <CertCard key={idx} cert={cert} businessInfo={businessInfo} />
+              <CertCard
+                key={idx}
+                cert={cert}
+                businessInfo={businessInfo}
+                shipmentResults={shipmentResults}
+                onRetryShipment={callShipmentApi}
+              />
             ))}
           </div>
         </div>
@@ -290,8 +410,14 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
 };
 
 // ── 개별 카드 (상태별 분기) ────────────────────────────────────────
-const CertCard: React.FC<{ cert: CertItem; businessInfo?: BusinessInfo }> = ({ cert, businessInfo }) => {
+const CertCard: React.FC<{
+  cert: CertItem;
+  businessInfo?: BusinessInfo;
+  shipmentResults: Record<string, ShipmentResult>;
+  onRetryShipment: (animalNo: string, issueItem: EkapeIssueItem, gradeRow: EkapeDetail) => void;
+}> = ({ cert, businessInfo, shipmentResults, onRetryShipment }) => {
   const { animal } = cert;
+
   if (cert.status === 'loading') {
     return (
       <div className="bg-white rounded-xl shadow p-8 flex items-center gap-4">
@@ -332,7 +458,6 @@ const CertCard: React.FC<{ cert: CertItem; businessInfo?: BusinessInfo }> = ({ c
     );
   }
 
-  // ── 성공: 확인서 문서 형태 출력 ────────────────────────────────
   const result     = cert.data!;
   const issueItems = result.items ?? [];
   const gradeInfo  = result.gradeInfo ?? [];
@@ -348,19 +473,60 @@ const CertCard: React.FC<{ cert: CertItem; businessInfo?: BusinessInfo }> = ({ c
 
   return (
     <>
-      {issueItems.map((issueItem, i) => (
-        <CertificateDocument
-          key={i}
-          animalNo={result.animalNo}
-          issueItem={issueItem}
-          // 첫 번째 issueItem에만 gradeInfo 표시 (API가 flatten 반환하므로)
-          gradeRows={i === 0 ? gradeInfo : []}
-          hasGradeError={hasGradeError}
-          animal={animal}
-          businessInfo={businessInfo}
-          totalCount={result.totalCount}
-        />
-      ))}
+      {issueItems.map((issueItem, i) => {
+        const gradeRow = i === 0 ? (gradeInfo[0] ?? {}) : {};
+        const key = shipKey(cert.animalNo, issueItem.issueNo);
+        const sr  = shipmentResults[key];
+
+        return (
+          <React.Fragment key={i}>
+            <CertificateDocument
+              animalNo={result.animalNo}
+              issueItem={issueItem}
+              gradeRows={i === 0 ? gradeInfo : []}
+              hasGradeError={hasGradeError}
+              animal={animal}
+              businessInfo={businessInfo}
+              totalCount={result.totalCount}
+            />
+
+            {/* ── 전자등록 상태 배지 (인쇄 시 숨김) ── */}
+            {sr && sr.status !== 'idle' && (
+              <div className={`no-print flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium border mt-1
+                ${sr.status === 'success'      ? 'bg-green-50 border-green-200 text-green-700' :
+                  sr.status === 'error'        ? 'bg-red-50 border-red-200 text-red-600' :
+                  sr.status === 'unconfigured' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                  'bg-blue-50 border-blue-200 text-blue-600'}`}
+              >
+                {sr.status === 'success'      && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                {sr.status === 'error'        && <AlertTriangle className="w-4 h-4 shrink-0" />}
+                {sr.status === 'unconfigured' && <AlertTriangle className="w-4 h-4 shrink-0" />}
+                {sr.status === 'sending'      && <Loader2 className="w-4 h-4 shrink-0 animate-spin" />}
+                <span className="flex-1">원패스 전자등록: {sr.message ?? (sr.status === 'sending' ? '전송 중...' : '')}</span>
+                {sr.status === 'error' && (
+                  <button
+                    onClick={() => onRetryShipment(cert.animalNo, issueItem, gradeRow)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" /> 재전송
+                  </button>
+                )}
+              </div>
+            )}
+            {/* 전자등록 전에 수동 전송 버튼 (아직 시도 전) */}
+            {!sr && (
+              <div className="no-print flex justify-end mt-1">
+                <button
+                  onClick={() => onRetryShipment(cert.animalNo, issueItem, gradeRow)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors"
+                >
+                  <Send className="w-3 h-3" /> 원패스 전자등록
+                </button>
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
     </>
   );
 };
@@ -373,7 +539,7 @@ const fmtDateKo = (v: unknown): string => {
   return s || '';
 };
 
-// ── 이력번호 표시 포맷: 002191046216 → 002 191 046 216 ───────────
+// ── 이력번호 포맷: 002191046216 → 002 191 046 216 ─────────────────
 const fmtAnimalNo = (no: string): string => {
   const c = no.replace(/\D/g, '');
   if (c.length === 12) return `${c.slice(0,3)} ${c.slice(3,6)} ${c.slice(6,9)} ${c.slice(9,12)}`;
@@ -398,26 +564,23 @@ const CertificateDocument: React.FC<{
   totalCount?: number;
 }> = ({ animalNo, issueItem, gradeRows, hasGradeError, animal, businessInfo, totalCount }) => {
 
-  const gi           = gradeRows[0] ?? {};
-  const issueNo      = str(issueItem.issueNo);
-  const issueDate    = fmtDateKo(issueItem.issueDate);
-  const judgeDate    = fmtDateKo(issueItem.judgeDate);
-  const abattNm      = str(issueItem.abattNm ?? issueItem.butchPlcNm);
-  const sexNm        = str(issueItem.judgeSexNm ?? issueItem.sexNm);
+  const gi        = gradeRows[0] ?? {};
+  const issueNo   = str(issueItem.issueNo);
+  const issueDate = fmtDateKo(issueItem.issueDate);
+  const judgeDate = fmtDateKo(issueItem.judgeDate);
+  const abattNm   = str(issueItem.abattNm ?? issueItem.butchPlcNm);
+  const sexNm     = str(issueItem.judgeSexNm ?? issueItem.sexNm);
 
-  // 도체번호, 품종, 중량, 육질, 육량 — step 2 데이터 우선, 없으면 공란
-  const breedNm      = gradeRows.length > 0 ? str(gi.breedNm ?? gi.liveStockNm)   : '';
-  const carcassWt    = gradeRows.length > 0 ? str(gi.carcassWeight)               : '';
-  const qulGrade     = gradeRows.length > 0 ? str(gi.qulGradeNm ?? gi.gradeNm)   : '';
-  const marble       = gradeRows.length > 0 ? str(gi.marbleScore)                 : '';
-  const yieldGrade   = gradeRows.length > 0 ? str(gi.yieldGradeNm)               : '';
-  const backfat      = gradeRows.length > 0 ? str(gi.backfatThick)               : '';
-  const sexDisplay   = gradeRows.length > 0 ? str(gi.sexNm ?? issueItem.judgeSexNm) : sexNm;
+  // Step 2 데이터 (품종은 resolveBreed 자동 판별)
+  const breedNm    = gradeRows.length > 0 ? resolveBreed(gi)                           : '';
+  const carcassWt  = gradeRows.length > 0 ? str(gi.carcassWeight)                      : '';
+  const qulGrade   = gradeRows.length > 0 ? str(gi.qulGradeNm ?? gi.gradeNm)          : '';
+  const marble     = gradeRows.length > 0 ? str(gi.marbleScore)                        : '';
+  const yieldGrade = gradeRows.length > 0 ? str(gi.yieldGradeNm)                      : '';
+  const backfat    = gradeRows.length > 0 ? str(gi.backfatThick)                       : '';
+  const sexDisplay = gradeRows.length > 0 ? str(gi.sexNm ?? issueItem.judgeSexNm)      : sexNm;
 
-  // 납품내역
   const hasDelvInfo  = !!(animal.destination || animal.cutName || animal.weightKg);
-
-  // step 2 미승인 안내
   const pendingNote  = hasGradeError && gradeRows.length === 0;
 
   const td  = { border: '1px solid #333' } as React.CSSProperties;
@@ -435,7 +598,7 @@ const CertificateDocument: React.FC<{
       display: 'flex', flexDirection: 'column',
     }}>
 
-      {/* ① 서식 번호 줄 */}
+      {/* ① 서식 번호 */}
       <div style={{ fontSize: '9px', color: '#555', marginBottom: '4px' }}>
         축산법 시행규칙 [별지 제 43호 서식] (개정 2018. 12. 27.)&nbsp;&nbsp;(열람용)
       </div>
@@ -521,7 +684,7 @@ const CertificateDocument: React.FC<{
         </tbody>
       </table>
 
-      {/* ⑦ 도체 등급 테이블 — flex:1 wrapper로 남은 공간 채우기 */}
+      {/* ⑦ 도체 등급 테이블 */}
       <div className="cert-grade-section" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '80mm', marginBottom: '4px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333',
           fontSize: '10px', textAlign: 'center', flex: 1 }}>
@@ -543,7 +706,7 @@ const CertificateDocument: React.FC<{
             {gradeRows.length > 0 ? (
               gradeRows.map((row, i) => {
                 const rCarcassNo = str(row.carcassNo ?? row.inspecNo);
-                const rBreed     = str(row.breedNm ?? row.liveStockNm);
+                const rBreed     = resolveBreed(row);           // ← 자동 품종 판별
                 const rSex       = str(row.sexNm ?? issueItem.judgeSexNm);
                 const rWeight    = str(row.carcassWeight);
                 const rQul       = str(row.qulGradeNm ?? row.gradeNm);
@@ -579,7 +742,7 @@ const CertificateDocument: React.FC<{
                 );
               })
             ) : (
-              // EKAPE Step 2 미승인 — 셀을 직접 클릭해서 수동 입력 가능
+              // Step 2 데이터 없음 — 수동 입력 모드
               <tr>
                 <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '44px', verticalAlign: 'middle' }}>
                   <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>&nbsp;</span>
@@ -621,7 +784,7 @@ const CertificateDocument: React.FC<{
         ※ 쇠고기 육질등급은 1++, 1+, 1, 2, 3 등외 등급(6단계)으로 구분됩니다.
       </div>
 
-      {/* ⑨ step 2 미승인 안내 */}
+      {/* ⑨ Step 2 미승인 안내 */}
       {pendingNote && (
         <div style={{ fontSize: '9px', color: '#c05000', marginBottom: '4px' }}>
           ※ 소도체 등급 상세(도체번호·품종·중량·육질·육량)는 EKAPE API 권한 획득 후 자동 표시됩니다.

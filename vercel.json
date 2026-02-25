@@ -4,7 +4,8 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "functions": {
-    "api/grade-cattle.ts": { "regions": ["icn1"] }
+    "api/grade-cattle.ts":    { "regions": ["icn1"] },
+    "api/grade-shipment.ts":  { "regions": ["icn1"] }
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
