@@ -193,18 +193,30 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
 
     try {
       const payload = {
-        animalNo:   animalNo.replace(/[-\s]/g, ''),
-        issueNo:    String(issueItem.issueNo   ?? ''),
-        carcassNo:  String(gradeRow.carcassNo  ?? gradeRow.inspecNo ?? ''),
-        breedNm:    resolveBreed(gradeRow),
-        sexNm:      String(gradeRow.sexNm      ?? issueItem.judgeSexNm ?? ''),
-        weight:     String(gradeRow.carcassWeight ?? ''),
-        qulGrade:   String(gradeRow.qulGradeNm ?? gradeRow.gradeNm    ?? ''),
-        yieldGrade: String(gradeRow.yieldGradeNm ?? ''),
-        judgeDate:  String(issueItem.judgeDate ?? '').replace(/-/g, ''),
-        abattNm:    String(issueItem.abattNm   ?? issueItem.butchPlcNm ?? ''),
-        compBizNo:  businessInfo?.bizNo   ?? '',
-        compNm:     businessInfo?.bizName ?? '',
+        // ── EKAPE 공통 ────────────────────────────────────────────
+        animalNo:     animalNo.replace(/[-\s]/g, ''),
+        issueNo:      String(issueItem.issueNo       ?? ''),
+        carcassNo:    String(gradeRow.carcassNo      ?? gradeRow.inspecNo ?? ''),
+        breedNm:      resolveBreed(gradeRow),
+        sexNm:        String(gradeRow.sexNm          ?? issueItem.judgeSexNm ?? ''),
+        weight:       String(gradeRow.carcassWeight  ?? ''),  // 도체중 (매입·가공생산용)
+        qulGrade:     String(gradeRow.qulGradeNm     ?? gradeRow.gradeNm    ?? ''),
+        yieldGrade:   String(gradeRow.yieldGradeNm   ?? ''),
+        judgeDate:    String(issueItem.judgeDate      ?? '').replace(/-/g, ''),
+        // ── 매입신고: 도축장 정보 ─────────────────────────────────
+        abattNm:      String(issueItem.abattNm       ?? issueItem.butchPlcNm ?? ''),
+        abattBizNo:   String(issueItem.abattCode      ?? ''), // 도축장 코드(사업자번호 근사치)
+        abattAddr:    '',                                      // 도축장 주소 (EKAPE 미제공, 공란)
+        // ── 표준부위: 지육(전체 도체) 기본값 ─────────────────────
+        cutCode:      '430110',  // 지육 (전체 도체) — 부위별 처리 시 변경
+        cutNm:        '지육',
+        // ── 가공생산·출고: 납품 정보 ─────────────────────────────
+        destBizNo:    '',        // 납품처 사업자번호 (향후 거래처 DB에서 조회)
+        destNm:       '',        // 납품처 상호
+        destWeight:   '',        // 납품 중량
+        // ── 신청인(우리 회사) 정보 ───────────────────────────────
+        compBizNo:    businessInfo?.bizNo   ?? '',
+        compNm:       businessInfo?.bizName ?? '',
       };
 
       const res = await fetch('/api/grade-shipment', {
