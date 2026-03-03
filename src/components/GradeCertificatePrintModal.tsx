@@ -565,6 +565,39 @@ const nowDatetime = (): string => {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 };
 
+// ── 워터마크 배경 (품종명 + 등급 반복) ────────────────────────────
+const WatermarkBackground: React.FC<{ breed: string; grade: string }> = ({ breed, grade }) => {
+  const parts = [breed, grade].filter(s => s && s !== '—');
+  if (parts.length === 0) return null;
+  const label = parts.join(' ');
+  return (
+    <div style={{
+      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+      overflow: 'hidden', pointerEvents: 'none', userSelect: 'none',
+    }}>
+      {Array.from({ length: 20 }, (_, i) => {
+        const col = i % 4;
+        const row = Math.floor(i / 4);
+        return (
+          <span key={i} style={{
+            position: 'absolute',
+            left: `${col * 25 + (row % 2 === 0 ? 2 : 14)}%`,
+            top: `${row * 20}%`,
+            transform: 'rotate(-25deg)',
+            fontSize: '30px',
+            fontWeight: 'bold',
+            color: 'rgba(80, 130, 220, 0.10)',
+            fontFamily: 'serif',
+            whiteSpace: 'nowrap',
+          }}>
+            {label}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
 // ── 공식 서식: 축산법 시행규칙 [별지 제 43호 서식] ────────────────
 const CertificateDocument: React.FC<{
   animalNo: string;
@@ -608,7 +641,12 @@ const CertificateDocument: React.FC<{
       fontSize: '10px', fontFamily: 'sans-serif', lineHeight: '1.5',
       padding: '5mm', minHeight: '267mm', boxSizing: 'border-box',
       display: 'flex', flexDirection: 'column',
+      position: 'relative',
     }}>
+      <WatermarkBackground
+        breed={breedNm !== '—' ? breedNm : ''}
+        grade={qulGrade !== '—' ? qulGrade : ''}
+      />
 
       {/* ① 서식 번호 */}
       <div style={{ fontSize: '9px', color: '#555', marginBottom: '4px' }}>
@@ -707,7 +745,7 @@ const CertificateDocument: React.FC<{
               <th rowSpan={2} style={{ ...td, padding: '5px 4px' }}>품종</th>
               <th rowSpan={2} style={{ ...td, padding: '5px 4px' }}>성별</th>
               <th rowSpan={2} style={{ ...td, padding: '5px 4px' }}>중량</th>
-              <th colSpan={2} style={{ ...td, padding: '4px 4px', fontWeight: 'bold' }}>등급</th>
+              <th colSpan={2} style={{ ...td, padding: '4px 4px', fontWeight: 'bold' }}>등&nbsp;급</th>
             </tr>
             <tr>
               <th style={{ ...td, padding: '4px 4px' }}>육질(근내지방도)</th>
