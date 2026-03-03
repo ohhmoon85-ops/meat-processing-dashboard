@@ -211,7 +211,7 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
         // ── 매입신고: 도축장 정보 ─────────────────────────────────
         abattNm:      String(issueItem.abattNm       ?? issueItem.butchPlcNm ?? ''),
         abattBizNo:   String(issueItem.abattCode      ?? ''), // 도축장 코드(사업자번호 근사치)
-        abattAddr:    '',                                      // 도축장 주소 (EKAPE 미제공, 공란)
+        abattAddr:    String(gradeRow.abattAddr       ?? ''), // 도축장 주소 (EKAPE gradeInfo)
         // ── 표준부위: 지육(전체 도체) 기본값 ─────────────────────
         cutCode:      '430110',  // 지육 (전체 도체) — 부위별 처리 시 변경
         cutNm:        '지육',
