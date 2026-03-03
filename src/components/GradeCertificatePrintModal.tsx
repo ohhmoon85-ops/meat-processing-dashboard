@@ -86,12 +86,16 @@ const LS_KIND_CODE_MAP: Record<string, string> = {
  * 우선순위: lsKindCd(코드) > lsKindNm(종류명) > breedNm(품종명) 키워드
  */
 function resolveBreed(row: EkapeDetail): string {
-  // 1. lsKindCd: 가장 신뢰할 수 있는 코드 기반 매핑
-  const code = String(row.lsKindCd ?? '').trim();
+  // 0. judgeBreedNm: 실제 EKAPE API 품종명 — 최우선 (한우, 육우 등)
+  const judgeBreed = String(row.judgeBreedNm ?? '').trim();
+  if (judgeBreed) return judgeBreed;
+
+  // 1. lsKindCd / judgeKindCd: 코드 기반 매핑
+  const code = String(row.lsKindCd ?? row.judgeKindCd ?? '').trim();
   if (code && LS_KIND_CODE_MAP[code]) return LS_KIND_CODE_MAP[code];
 
-  // 2. lsKindNm: 가축종류명 직접 사용 (키워드 정규화)
-  const kindNm = String(row.lsKindNm ?? '').trim();
+  // 2. lsKindNm / judgeKindNm: 가축종류명 (키워드 정규화)
+  const kindNm = String(row.lsKindNm ?? row.judgeKindNm ?? '').trim();
   if (kindNm) {
     if (kindNm.includes('한우')) return '한우';
     if (kindNm.includes('육우')) return '육우';
@@ -196,12 +200,12 @@ const GradeCertificatePrintModal: React.FC<Props> = ({ animals, businessInfo, on
         // ── EKAPE 공통 ────────────────────────────────────────────
         animalNo:     animalNo.replace(/[-\s]/g, ''),
         issueNo:      String(issueItem.issueNo       ?? ''),
-        carcassNo:    String(gradeRow.carcassNo      ?? gradeRow.inspecNo ?? ''),
+        carcassNo:    String(gradeRow.cattleNo ?? gradeRow.carcassNo ?? gradeRow.inspecNo ?? ''),
         breedNm:      resolveBreed(gradeRow),
         sexNm:        String(gradeRow.sexNm          ?? issueItem.judgeSexNm ?? ''),
-        weight:       String(gradeRow.carcassWeight  ?? ''),  // 도체중 (매입·가공생산용)
-        qulGrade:     String(gradeRow.qulGradeNm     ?? gradeRow.gradeNm    ?? ''),
-        yieldGrade:   String(gradeRow.yieldGradeNm   ?? ''),
+        weight:       String(gradeRow.weight ?? gradeRow.carcassWeight ?? ''),  // 도체중
+        qulGrade:     String(gradeRow.qulGradeNm ?? gradeRow.gradeNm ?? ''),
+        yieldGrade:   String(gradeRow.wgrade ?? gradeRow.yieldGradeNm ?? ''),
         judgeDate:    String(issueItem.judgeDate      ?? '').replace(/-/g, ''),
         // ── 매입신고: 도축장 정보 ─────────────────────────────────
         abattNm:      String(issueItem.abattNm       ?? issueItem.butchPlcNm ?? ''),
@@ -617,13 +621,15 @@ const CertificateDocument: React.FC<{
   const sexNm     = str(issueItem.judgeSexNm ?? issueItem.sexNm);
 
   // Step 2 데이터 (품종은 resolveBreed 자동 판별)
-  const breedNm    = gradeRows.length > 0 ? resolveBreed(gi)                           : '';
-  const carcassWt  = gradeRows.length > 0 ? str(gi.carcassWeight)                      : '';
-  const qulGrade   = gradeRows.length > 0 ? str(gi.qulGradeNm ?? gi.gradeNm)          : '';
-  const marble     = gradeRows.length > 0 ? str(gi.marbleScore)                        : '';
-  const yieldGrade = gradeRows.length > 0 ? str(gi.yieldGradeNm)                      : '';
-  const backfat    = gradeRows.length > 0 ? str(gi.backfatThick)                       : '';
-  const sexDisplay = gradeRows.length > 0 ? str(gi.sexNm ?? issueItem.judgeSexNm)      : sexNm;
+  const breedNm    = gradeRows.length > 0 ? resolveBreed(gi)                                        : '';
+  const carcassWt  = gradeRows.length > 0 ? str(gi.weight ?? gi.carcassWeight)                    : '';
+  const qulGrade   = gradeRows.length > 0 ? str(gi.qulGradeNm ?? gi.gradeNm)                     : '';
+  const marble     = gradeRows.length > 0 ? str(gi.insfat ?? gi.marbleScore)                      : '';
+  const yieldGrade = gradeRows.length > 0 ? str(gi.wgrade ?? gi.yieldGradeNm)                    : '';
+  const backfat    = gradeRows.length > 0 ? str(gi.backfat ?? gi.backfatThick)                    : '';
+  const sexDisplay = gradeRows.length > 0 ? str(gi.judgeSexNm ?? gi.sexNm ?? issueItem.judgeSexNm) : sexNm;
+  const abattAddr  = gradeRows.length > 0 ? str(gi.abattAddr)  : '';
+  const abattTelNo = gradeRows.length > 0 ? str(gi.abattTelNo) : '';
 
   const hasDelvInfo  = !!(animal.destination || animal.cutName || animal.weightKg);
   const pendingNote  = hasGradeError && gradeRows.length === 0;
@@ -727,9 +733,9 @@ const CertificateDocument: React.FC<{
           </tr>
           <tr>
             <td style={{ ...tdH, padding: '6px 6px' }}>소재지</td>
-            <td style={{ ...td,  padding: '6px 6px' }}>&nbsp;</td>
+            <td style={{ ...td,  padding: '6px 6px' }}>{abattAddr !== '—' ? abattAddr : '\u00a0'}</td>
             <td style={{ ...tdH, padding: '6px 6px', width: '50px', whiteSpace: 'nowrap' }}>전화번호</td>
-            <td style={{ ...td,  padding: '6px 6px', width: '90px' }}>&nbsp;</td>
+            <td style={{ ...td,  padding: '6px 6px', width: '90px' }}>{abattTelNo !== '—' ? abattTelNo : '\u00a0'}</td>
           </tr>
         </tbody>
       </table>
@@ -755,14 +761,14 @@ const CertificateDocument: React.FC<{
           <tbody>
             {gradeRows.length > 0 ? (
               gradeRows.map((row, i) => {
-                const rCarcassNo = str(row.carcassNo ?? row.inspecNo);
-                const rBreed     = resolveBreed(row);           // ← 자동 품종 판별
-                const rSex       = str(row.sexNm ?? issueItem.judgeSexNm);
-                const rWeight    = str(row.carcassWeight);
+                const rCarcassNo = str(row.cattleNo ?? row.carcassNo ?? row.inspecNo);
+                const rBreed     = resolveBreed(row);
+                const rSex       = str(row.judgeSexNm ?? row.sexNm ?? issueItem.judgeSexNm);
+                const rWeight    = str(row.weight ?? row.carcassWeight);
                 const rQul       = str(row.qulGradeNm ?? row.gradeNm);
-                const rMarble    = str(row.marbleScore);
-                const rYield     = str(row.yieldGradeNm);
-                const rBackfat   = str(row.backfatThick);
+                const rMarble    = str(row.insfat ?? row.marbleScore);
+                const rYield     = str(row.wgrade ?? row.yieldGradeNm);
+                const rBackfat   = str(row.backfat ?? row.backfatThick);
                 const editStyle: React.CSSProperties = { outline: 'none', minWidth: '20px', display: 'inline-block' };
                 return (
                   <tr key={i}>
