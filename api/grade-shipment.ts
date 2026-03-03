@@ -130,13 +130,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Method not allowed' });
 
   // ── 환경변수 ─────────────────────────────────────────────────
-  const endpoint      = process.env.MTRACE_ENDPOINT      ?? DEFAULT_ENDPOINT;
+  const endpoint      = process.env.MTRACE_ENDPOINT ?? DEFAULT_ENDPOINT;
   const userId        = process.env.MTRACE_USER_ID;
   const apiKey        = process.env.MTRACE_API_KEY;
-  const registerType  = process.env.MTRACE_REGISTER_TYPE ?? 'purchase'; // purchase | production | sales
-  const serviceKey    = process.env.MTRACE_SERVICE_KEY   ?? 'addCattleIn';
-  // ※ 서비스키 예시: addCattleIn(매입), addCattlePrc(가공생산), addCattleOut(출고)
-  //   정확한 서비스키는 이력지원실(1577-2633) 또는 pub.mtrace.go.kr 담당자에게 문의
+
+  // registerType: 요청 바디 > ENV 변수 > 기본값 순으로 우선순위
+  // purchase(매입신고) | production(가공생산) | sales(출고)
+  const bodyRegisterType = (req.body as Record<string, string>)?.registerType;
+  const registerType  = bodyRegisterType ?? process.env.MTRACE_REGISTER_TYPE ?? 'purchase';
+
+  // 서비스키: ENV 변수 > 등록 유형별 기본값
+  // ※ 정확한 서비스키는 이력지원실(1577-2633) 또는 pub.mtrace.go.kr 담당자에게 문의
+  const serviceKeyDefaults: Record<string, string> = {
+    purchase:   'addCattleIn',
+    production: 'addCattlePrc',
+    sales:      'addCattleOut',
+  };
+  const serviceKey = process.env.MTRACE_SERVICE_KEY ?? serviceKeyDefaults[registerType] ?? 'addCattleIn';
 
   if (!userId || !apiKey) {
     return res.status(503).json({

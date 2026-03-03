@@ -838,7 +838,7 @@ const CertificateDocument: React.FC<{
           <tfoot>
             <tr style={{ background: '#f0f0f0' }}>
               <td colSpan={7} style={{ ...td, padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', fontSize: '20px' }}>
-                계 : 壹두
+                계 : <span style={{ fontFamily: '"Noto Serif KR", "Noto Serif CJK KR", "Malgun Gothic", "맑은 고딕", serif' }}>壹</span>두
               </td>
             </tr>
           </tfoot>
