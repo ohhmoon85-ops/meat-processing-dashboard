@@ -642,7 +642,6 @@ const CertificateDocument: React.FC<{
   const qulGrade   = gradeRows.length > 0 ? str(gi.qulGradeNm ?? gi.gradeNm)                     : '';
   const marble     = gradeRows.length > 0 ? str(gi.insfat ?? gi.marbleScore)                      : '';
   const yieldGrade = gradeRows.length > 0 ? str(gi.wgrade ?? gi.yieldGradeNm)                    : '';
-  const backfat    = gradeRows.length > 0 ? str(gi.backfat ?? gi.backfatThick)                    : '';
   const windex     = gradeRows.length > 0 ? str(gi.windex)                                        : '';
   const sexDisplay = gradeRows.length > 0 ? str(gi.judgeSexNm ?? gi.sexNm ?? issueItem.judgeSexNm) : sexNm;
   const abattAddr  = gradeRows.length > 0 ? str(gi.abattAddr)  : '';
