@@ -20,9 +20,9 @@ export const config = { runtime: 'edge' };
 const ISSUE_NO_URL =
   'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/issueNo';
 
-// 2단계: /api/grade-cattle 프록시 경유 (Node.js icn1 Seoul → EKAPE HTTPS)
-// Edge Runtime은 EKAPE HTTPS 인증서 TLS 오류 → Node.js rejectUnauthorized:false 우회
-const CATTLE_PROXY = '/api/grade-cattle';
+// 2단계: EKAPE /confirm/cattle 직접 호출 (HTTP, Step 1과 동일 방식)
+const CATTLE_URL =
+  'http://data.ekape.or.kr/openapi-data/service/user/grade/confirm/cattle';
 
 // ── XML 파서 ───────────────────────────────────────────────────────
 const xmlParser = new XMLParser({
@@ -90,9 +90,6 @@ export default async function handler(req: Request): Promise<Response> {
     return jsonRes({ error: 'EKAPE_API_KEY 환경변수가 설정되지 않았습니다.' }, 500);
   }
 
-  // 2단계 프록시 URL: 현재 요청의 origin + /api/grade-cattle
-  const origin = new URL(req.url).origin;
-
   try {
     // ── 1단계: 이력번호 → 확인서발급번호(issueNo) 목록 ───────────────
     const step1Url =
@@ -111,7 +108,7 @@ export default async function handler(req: Request): Promise<Response> {
       return jsonRes({ error: '해당 이력번호의 등급판정 기록이 없습니다.', animalNo }, 404);
     }
 
-    // ── 2단계: /api/grade-cattle 프록시 경유 등급판정 상세 조회 ───────
+    // ── 2단계: EKAPE /confirm/cattle 직접 조회 (Step 1과 동일한 방식) ──
     const gradeResults = await Promise.all(
       issueItems.map(async (issueItem) => {
         const issueNo = String(issueItem.issueNo ?? '').trim();
@@ -121,35 +118,26 @@ export default async function handler(req: Request): Promise<Response> {
         }
 
         const rawDate = String(issueItem.issueDate ?? '').trim();
-        // YYYYMMDD → YYYY-MM-DD 변환 (오퍼레이션 11 샘플 형식: 2013-01-10)
         const issueDate = /^\d{8}$/.test(rawDate)
           ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
           : rawDate;
         const params = new URLSearchParams({ issueNo, serviceKey: apiKey });
         if (issueDate) params.set('issueDate', issueDate);
-        const proxyUrl = `${origin}${CATTLE_PROXY}?${params.toString()}`;
+        const cattleUrl = `${CATTLE_URL}?${params.toString()}`;
 
         try {
           const fetchRes = await Promise.race([
-            fetch(proxyUrl),
+            fetch(cattleUrl),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('timeout_20s')), 20000)
             ),
           ]);
-          const json = await fetchRes.json() as { items?: unknown[]; error?: string };
-
-          if (!fetchRes.ok || json.error) {
-            return {
-              issueNo,
-              items: [] as unknown[],
-              debug: `proxy ${fetchRes.status}: ${json.error ?? ''}`,
-            };
-          }
-
-          return { issueNo, items: json.items ?? [], debug: undefined };
+          const xmlText = await fetchRes.text();
+          const items = extractItems(xmlText);
+          return { issueNo, items, debug: undefined };
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          return { issueNo, items: [] as unknown[], debug: `proxy fetch: ${msg}` };
+          return { issueNo, items: [] as unknown[], debug: `cattle fetch: ${msg}` };
         }
       })
     );
