@@ -5,7 +5,8 @@
  * - Step 2 (권한 승인됨): EKAPE cattle API → 도체번호·품종·도체중·육질·육량 등급 표시
  * - 전자등록: 인쇄 시 mtrace 원패스 시스템에 출고 데이터 비동기 전송
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import QRCode from 'qrcode';
 import { X, Printer, Loader2, AlertTriangle, FileText, CheckCircle2, RefreshCw, Send } from 'lucide-react';
 import type { BusinessInfo } from './SettingsModal';
 
@@ -569,6 +570,26 @@ const nowDatetime = (): string => {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 };
 
+// ── QR 코드 (발급번호 인코딩) ─────────────────────────────────────
+const QrCodeCell: React.FC<{ text: string; size?: number }> = ({ text, size = 80 }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!canvasRef.current || !text || text === '—') return;
+    QRCode.toCanvas(canvasRef.current, text, {
+      width: size, margin: 1,
+      color: { dark: '#000000', light: '#ffffff' },
+    }).catch(() => {});
+  }, [text, size]);
+  return (
+    <canvas
+      ref={canvasRef}
+      width={size}
+      height={size}
+      style={{ display: 'block', margin: '0 auto' }}
+    />
+  );
+};
+
 // ── 워터마크 배경 ("열람용" 반복 — 공식 서식 일치) ───────────────
 const WatermarkBackground: React.FC = () => (
   <div style={{
@@ -668,10 +689,7 @@ const CertificateDocument: React.FC<{
               </div>
             </td>
             <td style={{ width: '28%', padding: '10px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
-              <div style={{ width: '80px', height: '80px', border: '1px solid #aaa', margin: '0 auto',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#aaa' }}>
-                QR
-              </div>
+              <QrCodeCell text={issueNo} size={80} />
             </td>
           </tr>
         </tbody>
@@ -873,7 +891,7 @@ const CertificateDocument: React.FC<{
       {/* ⑫ 법적 고지사항 */}
       <div style={{ fontSize: '9px', color: '#444', lineHeight: '2.0', borderTop: '1px solid #bbb', paddingTop: '4px' }}>
         <div>◎ 이 확인서 내용은 축산물품질평가원 홈페이지(www.ekape.or.kr) &ldquo;축산물등급판정확인서 조회&rdquo; 메뉴를 이용하여 조회할 수 있습니다.</div>
-        <div>◎ 「축산법」제 45조 제 1항에 따라 등급판정신청인 또는 인수인이 해당 축산물을 학교나 음식점 납품 등의 특정 목적으로 사용하는 경우에는 이 확인서를 제출하여야 합니다.</div>
+        <div>◎ 「축산법」 제 45조 제 4항에 따라 등급판정신청인 또는 매수인이 해당 축산물을 학교나 음식점 납품 등의 특수목적으로 사용하는 경우에는 이 확인서를 제출하여야 합니다.</div>
         <div>◎ 이 등급판정확인서는 축산물품질평가원의 정식 서식입니다. 단, 수출용의 경우에는 육질 1+등급 이상에 표시됩니다.</div>
         <div>◎ 등급판정 결과에 이의가 있으신 사항은 축산물품질평가원 고객지원(044-410-7000)로 문의해 주시기 바랍니다.</div>
         <div style={{ textAlign: 'right', marginTop: '3px', color: '#666' }}>210mm×297mm [백상지 80 g/㎡ (재활용품)]</div>
