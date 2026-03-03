@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut, Factory } from 'lucide-react';
@@ -6,7 +6,7 @@ import { exportToExcel, generateDummyData } from '../utils/excelExport';
 import { downloadExcelReport } from '../utils/downloadExcelReport';
 import GradeCertificatePrintModal from './GradeCertificatePrintModal';
 import CutRegistrationModal from './CutRegistrationModal';
-import SettingsModal, { BUSINESS_INFO_KEY, loadBusinessInfo } from './SettingsModal';
+import SettingsModal, { BUSINESS_INFO_KEY, loadBusinessInfo, emptyBusinessInfo } from './SettingsModal';
 import type { BusinessInfo } from './SettingsModal';
 import { supabase } from '../lib/supabase';
 
@@ -56,10 +56,22 @@ const Dashboard: React.FC = () => {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // ── 업체 설정 저장 ────────────────────────────────────────────────
-  const handleSaveSettings = (info: BusinessInfo) => {
+  // ── 마운트 시 Supabase 메타데이터 → localStorage → 상태 동기화 ─────
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.user_metadata?.businessInfo) {
+        const info: BusinessInfo = { ...emptyBusinessInfo(), ...(user.user_metadata.businessInfo as BusinessInfo) };
+        setBusinessInfo(info);
+        localStorage.setItem(BUSINESS_INFO_KEY, JSON.stringify(info));
+      }
+    });
+  }, []);
+
+  // ── 업체 설정 저장 (Supabase 메타데이터 + localStorage 동시 저장) ──
+  const handleSaveSettings = async (info: BusinessInfo) => {
     setBusinessInfo(info);
     localStorage.setItem(BUSINESS_INFO_KEY, JSON.stringify(info));
+    await supabase.auth.updateUser({ data: { businessInfo: info } });
     setShowSettings(false);
   };
 
