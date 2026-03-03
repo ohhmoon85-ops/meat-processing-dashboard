@@ -771,7 +771,7 @@ const CertificateDocument: React.FC<{
           <tbody>
             {gradeRows.length > 0 ? (
               gradeRows.map((row, i) => {
-                const rCarcassNo = str(row.cattleNo ?? row.carcassNo ?? row.inspecNo);
+                const rCarcassNo = str(row.abattFno ?? row.carcassNo ?? row.inspecNo);
                 const rBreed     = resolveBreed(row);
                 const rSex       = str(row.judgeSexNm ?? row.sexNm ?? issueItem.judgeSexNm);
                 const rWeight    = str(row.weight ?? row.carcassWeight);
@@ -783,10 +783,10 @@ const CertificateDocument: React.FC<{
                 return (
                   <tr key={i}>
                     <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '44px', verticalAlign: 'middle' }}>
-                      <span contentEditable suppressContentEditableWarning style={editStyle}>{rCarcassNo !== '—' ? rCarcassNo : ''}</span>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{rCarcassNo !== '—' ? rCarcassNo.trim() : ''}</span>
                     </td>
                     <td style={{ ...td, height: '70mm', verticalAlign: 'middle' }}>
-                      <div style={{ fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', marginBottom: '10px' }}>{fmtAnimalNo(animalNo)}</div>
+                      <div style={{ fontFamily: 'monospace', fontSize: '16px', letterSpacing: '2px', marginBottom: '10px' }}>{fmtAnimalNo(animalNo)}</div>
                       {barcode}
                     </td>
                     <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
@@ -814,7 +814,7 @@ const CertificateDocument: React.FC<{
                   <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>&nbsp;</span>
                 </td>
                 <td style={{ ...td, height: '70mm', verticalAlign: 'middle' }}>
-                  <div style={{ fontFamily: 'monospace', fontSize: '13px', letterSpacing: '2px', marginBottom: '10px' }}>{fmtAnimalNo(animalNo)}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '16px', letterSpacing: '2px', marginBottom: '10px' }}>{fmtAnimalNo(animalNo)}</div>
                   {barcode}
                 </td>
                 <td style={{ ...td, height: '70mm', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle' }}>
