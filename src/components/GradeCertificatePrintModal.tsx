@@ -569,38 +569,33 @@ const nowDatetime = (): string => {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 };
 
-// ── 워터마크 배경 (품종명 + 등급 반복) ────────────────────────────
-const WatermarkBackground: React.FC<{ breed: string; grade: string }> = ({ breed, grade }) => {
-  const parts = [breed, grade].filter(s => s && s !== '—');
-  if (parts.length === 0) return null;
-  const label = parts.join(' ');
-  return (
-    <div style={{
-      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-      overflow: 'hidden', pointerEvents: 'none', userSelect: 'none',
-    }}>
-      {Array.from({ length: 20 }, (_, i) => {
-        const col = i % 4;
-        const row = Math.floor(i / 4);
-        return (
-          <span key={i} style={{
-            position: 'absolute',
-            left: `${col * 25 + (row % 2 === 0 ? 2 : 14)}%`,
-            top: `${row * 20}%`,
-            transform: 'rotate(-25deg)',
-            fontSize: '30px',
-            fontWeight: 'bold',
-            color: 'rgba(80, 130, 220, 0.10)',
-            fontFamily: 'serif',
-            whiteSpace: 'nowrap',
-          }}>
-            {label}
-          </span>
-        );
-      })}
-    </div>
-  );
-};
+// ── 워터마크 배경 ("열람용" 반복 — 공식 서식 일치) ───────────────
+const WatermarkBackground: React.FC = () => (
+  <div style={{
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    overflow: 'hidden', pointerEvents: 'none', userSelect: 'none',
+  }}>
+    {Array.from({ length: 20 }, (_, i) => {
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      return (
+        <span key={i} style={{
+          position: 'absolute',
+          left: `${col * 25 + (row % 2 === 0 ? 2 : 14)}%`,
+          top: `${row * 20}%`,
+          transform: 'rotate(-25deg)',
+          fontSize: '28px',
+          fontWeight: 'bold',
+          color: 'rgba(80, 130, 220, 0.12)',
+          fontFamily: 'serif',
+          whiteSpace: 'nowrap',
+        }}>
+          열람용
+        </span>
+      );
+    })}
+  </div>
+);
 
 // ── 공식 서식: 축산법 시행규칙 [별지 제 43호 서식] ────────────────
 const CertificateDocument: React.FC<{
@@ -627,6 +622,7 @@ const CertificateDocument: React.FC<{
   const marble     = gradeRows.length > 0 ? str(gi.insfat ?? gi.marbleScore)                      : '';
   const yieldGrade = gradeRows.length > 0 ? str(gi.wgrade ?? gi.yieldGradeNm)                    : '';
   const backfat    = gradeRows.length > 0 ? str(gi.backfat ?? gi.backfatThick)                    : '';
+  const windex     = gradeRows.length > 0 ? str(gi.windex)                                        : '';
   const sexDisplay = gradeRows.length > 0 ? str(gi.judgeSexNm ?? gi.sexNm ?? issueItem.judgeSexNm) : sexNm;
   const abattAddr  = gradeRows.length > 0 ? str(gi.abattAddr)  : '';
   const abattTelNo = gradeRows.length > 0 ? str(gi.abattTelNo) : '';
@@ -649,10 +645,7 @@ const CertificateDocument: React.FC<{
       display: 'flex', flexDirection: 'column',
       position: 'relative',
     }}>
-      <WatermarkBackground
-        breed={breedNm !== '—' ? breedNm : ''}
-        grade={qulGrade !== '—' ? qulGrade : ''}
-      />
+      <WatermarkBackground />
 
       {/* ① 서식 번호 */}
       <div style={{ fontSize: '9px', color: '#555', marginBottom: '4px' }}>
@@ -755,7 +748,7 @@ const CertificateDocument: React.FC<{
             </tr>
             <tr>
               <th style={{ ...td, padding: '4px 4px' }}>육질(근내지방도)</th>
-              <th style={{ ...td, padding: '4px 4px' }}>육량(등지방두께)</th>
+              <th style={{ ...td, padding: '4px 4px' }}>육량(육량지수)</th>
             </tr>
           </thead>
           <tbody>
@@ -768,7 +761,7 @@ const CertificateDocument: React.FC<{
                 const rQul       = str(row.qulGradeNm ?? row.gradeNm);
                 const rMarble    = str(row.insfat ?? row.marbleScore);
                 const rYield     = str(row.wgrade ?? row.yieldGradeNm);
-                const rBackfat   = str(row.backfat ?? row.backfatThick);
+                const rWindex    = str(row.windex);
                 const editStyle: React.CSSProperties = { outline: 'none', minWidth: '20px', display: 'inline-block' };
                 return (
                   <tr key={i}>
@@ -792,7 +785,7 @@ const CertificateDocument: React.FC<{
                       <span contentEditable suppressContentEditableWarning style={editStyle}>{(rQul !== '—' ? rQul : '') + (rMarble && rMarble !== '—' ? `(${rMarble})` : '')}</span>
                     </td>
                     <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '17px', verticalAlign: 'middle' }}>
-                      <span contentEditable suppressContentEditableWarning style={editStyle}>{(rYield !== '—' ? rYield : '') + (rBackfat && rBackfat !== '—' ? `(${rBackfat})` : '')}</span>
+                      <span contentEditable suppressContentEditableWarning style={editStyle}>{(rYield !== '—' ? rYield : '') + (rWindex && rWindex !== '—' ? `(${rWindex})` : '')}</span>
                     </td>
                   </tr>
                 );
@@ -820,7 +813,7 @@ const CertificateDocument: React.FC<{
                   <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{qulGrade && qulGrade !== '—' ? (marble && marble !== '—' ? `${qulGrade}(${marble})` : qulGrade) : ''}</span>
                 </td>
                 <td style={{ ...td, height: '70mm', fontWeight: 'bold', fontSize: '17px', verticalAlign: 'middle' }}>
-                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{yieldGrade && yieldGrade !== '—' ? (backfat && backfat !== '—' ? `${yieldGrade}(${backfat})` : yieldGrade) : ''}</span>
+                  <span contentEditable suppressContentEditableWarning style={{ outline: 'none', minWidth: '20px', display: 'inline-block' }}>{yieldGrade && yieldGrade !== '—' ? (windex && windex !== '—' ? `${yieldGrade}(${windex})` : yieldGrade) : ''}</span>
                 </td>
               </tr>
             )}
