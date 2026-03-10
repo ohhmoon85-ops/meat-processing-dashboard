@@ -647,6 +647,18 @@ const CertificateDocument: React.FC<{
   const abattAddr  = gradeRows.length > 0 ? str(gi.abattAddr)  : '';
   const abattTelNo = gradeRows.length > 0 ? str(gi.abattTelNo) : '';
 
+  // ── EKAPE 평가사 정보 (raterNm) ───────────────────────────────────
+  const raterNm  = gradeRows.length > 0 ? str(gi.raterNm)  : '';  // 예: 신**
+
+  // ── EKAPE 신청인(매도자) 정보 ─────────────────────────────────────
+  const reqUserNm = gradeRows.length > 0 ? str(gi.reqUserNm) : '';  // 예: 김**
+  const reqComNm  = gradeRows.length > 0 ? str(gi.reqComNm)  : '';  // 예: (주)대진엠에스
+  const reqRegNo  = gradeRows.length > 0 ? (() => {
+    const n = str(gi.reqRegNo).replace(/\D/g, '');
+    return n.length === 10 ? `${n.slice(0,3)}-${n.slice(3,5)}-${n.slice(5)}` : str(gi.reqRegNo);
+  })() : '';
+  const reqAddr   = gradeRows.length > 0 ? str(gi.reqAddr)   : '';
+
   const hasDelvInfo  = !!(animal.destination || animal.cutName || animal.weightKg);
   const pendingNote  = hasGradeError && gradeRows.length === 0;
 
@@ -703,29 +715,42 @@ const CertificateDocument: React.FC<{
       <div style={{ textAlign: 'right', marginBottom: '8px', fontSize: '10px', lineHeight: '1.9' }}>
         <div>{issueDate}</div>
         <div>축산물품질평가사 소속 :&nbsp;{businessInfo?.evaluatorOrg || '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0'}</div>
-        <div>성명 :&nbsp;{businessInfo?.evaluatorName || '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0'}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)</div>
+        <div>성명 :&nbsp;
+          <span style={{ fontWeight: 'bold' }}>
+            {raterNm !== '—' ? raterNm : (businessInfo?.evaluatorName || '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0')}
+          </span>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(인)
+        </div>
       </div>
 
-      {/* ⑤ 신청인 정보 */}
+      {/* ⑤ 신청인 정보 — EKAPE reqXxx 필드 우선, 없으면 업체설정 폴백 */}
       <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #333', marginBottom: '4px', fontSize: '10px' }}>
         <tbody>
           <tr>
             <td rowSpan={3} style={{ ...tdH, padding: '4px 5px', textAlign: 'center', width: '28px',
               fontWeight: 'bold', writingMode: 'vertical-rl', letterSpacing: '4px' }}>신청인</td>
             <td style={{ ...tdH, padding: '6px 6px', whiteSpace: 'nowrap' }}>성&nbsp;&nbsp;명</td>
-            <td style={{ ...td,  padding: '6px 6px', width: '22%' }}>{businessInfo?.name || '\u00a0'}</td>
+            <td style={{ ...td,  padding: '6px 6px', width: '22%' }}>
+              {reqUserNm !== '—' ? reqUserNm : (businessInfo?.name || '\u00a0')}
+            </td>
             <td style={{ ...tdH, padding: '6px 4px', whiteSpace: 'nowrap', fontSize: '9px' }}>생년월일(사업자등록번호)</td>
-            <td style={{ ...td,  padding: '6px 6px' }}>{businessInfo?.bizNo || '\u00a0'}</td>
+            <td style={{ ...td,  padding: '6px 6px' }}>
+              {reqRegNo !== '—' ? reqRegNo : (businessInfo?.bizNo || '\u00a0')}
+            </td>
           </tr>
           <tr>
             <td style={{ ...tdH, padding: '6px 6px', whiteSpace: 'nowrap' }}>업&nbsp;소&nbsp;명</td>
-            <td style={{ ...td,  padding: '6px 6px' }}>{businessInfo?.bizName || '\u00a0'}</td>
+            <td style={{ ...td,  padding: '6px 6px' }}>
+              {reqComNm !== '—' ? reqComNm : (businessInfo?.bizName || '\u00a0')}
+            </td>
             <td style={{ ...tdH, padding: '6px 6px', whiteSpace: 'nowrap' }}>업태유형</td>
             <td style={{ ...td,  padding: '6px 6px' }}>{businessInfo?.bizType || '\u00a0'}</td>
           </tr>
           <tr>
             <td style={{ ...tdH, padding: '6px 6px', whiteSpace: 'nowrap' }}>주&nbsp;&nbsp;소</td>
-            <td colSpan={3} style={{ ...td, padding: '6px 6px' }}>{businessInfo?.address || '\u00a0'}</td>
+            <td colSpan={3} style={{ ...td, padding: '6px 6px' }}>
+              {reqAddr !== '—' ? reqAddr : (businessInfo?.address || '\u00a0')}
+            </td>
           </tr>
         </tbody>
       </table>
