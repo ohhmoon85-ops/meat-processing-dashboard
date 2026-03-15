@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut, Factory } from 'lucide-react';
-import GradeCertificatePrintModal from './GradeCertificatePrintModal';
 import CutRegistrationModal from './CutRegistrationModal';
 import SettingsModal, { BUSINESS_INFO_KEY, loadBusinessInfo, emptyBusinessInfo } from './SettingsModal';
 import type { BusinessInfo } from './SettingsModal';
@@ -46,8 +45,7 @@ const Dashboard: React.FC = () => {
   const [barcodeInput, setBarcodeInput] = useState('');
   const [message, setMessage] = useState<Message>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [certModalAnimals, setCertModalAnimals] = useState<AnimalData[] | null>(null);
-  const [cutModalAnimal,   setCutModalAnimal]   = useState<AnimalData | null>(null);
+  const [cutModalAnimal, setCutModalAnimal] = useState<AnimalData | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(loadBusinessInfo);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -455,22 +453,29 @@ const Dashboard: React.FC = () => {
     setCutModalAnimal(selected[0]);
   };
 
-  // ── 등급판정서 일괄 출력 ───────────────────────────────────────
-  const handlePrintGradeCertificates = () => {
-    const selectedItems = animalList.filter((item) => item.selected);
-    if (selectedItems.length === 0) {
-      alert('출력할 개체를 선택해 주세요.');
-      return;
-    }
-    setCertModalAnimals(selectedItems);
-  };
-
   // ── 이력번호로 ekape.or.kr 원패스 열기 ──────────────────────
   const openEkapeForAnimal = (animalNumber: string) => {
     const digits = animalNumber.replace(/\D/g, '');
     const formatted = digits.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
     const url = `https://www.ekape.or.kr/kapecp/oneservicemng/oneSrvcMng/combineSearchOne.do?searchKeyword=${encodeURIComponent(formatted)}`;
     window.open(url, '_blank');
+  };
+
+  // ── 원패스 열람용 확인서 일괄 열기 ───────────────────────────
+  const handleOpenEkapeBatch = () => {
+    const selectedItems = animalList.filter((item) => item.selected);
+    if (selectedItems.length === 0) {
+      alert('개체를 선택해 주세요.');
+      return;
+    }
+    if (selectedItems.length > 5) {
+      const ok = window.confirm(`${selectedItems.length}개의 탭이 열립니다. 계속하시겠습니까?`);
+      if (!ok) return;
+    }
+    selectedItems.forEach((item, idx) => {
+      setTimeout(() => openEkapeForAnimal(item.animalNumber), idx * 300);
+    });
+    showMessage({ type: 'success', text: `${selectedItems.length}건 — 원패스 탭을 열고 있습니다. 등급판정정보 탭 → 열람용 확인서 보기를 클릭하세요.` });
   };
 
   const selectedCount = animalList.filter((item) => item.selected).length;
@@ -734,9 +739,9 @@ const Dashboard: React.FC = () => {
                 <Factory className="w-4 h-4 mr-1.5" />
                 가공생산/출고 등록
               </button>
-              {/* 등급판정서 일괄 출력 버튼 */}
+              {/* 원패스 열람용 확인서 일괄 열기 버튼 */}
               <button
-                onClick={handlePrintGradeCertificates}
+                onClick={handleOpenEkapeBatch}
                 disabled={selectedCount === 0}
                 className={`flex items-center px-6 py-3 rounded-lg font-semibold transition-all ${
                   selectedCount === 0
@@ -745,7 +750,12 @@ const Dashboard: React.FC = () => {
                 }`}
               >
                 <FileText className="w-5 h-5 mr-2" />
-                등급판정서 일괄 출력
+                원패스 열람용 확인서 열기
+                {selectedCount > 0 && (
+                  <span className="ml-2 bg-white text-blue-600 rounded-full text-xs px-2 py-0.5 font-bold">
+                    {selectedCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -765,15 +775,6 @@ const Dashboard: React.FC = () => {
         animal={cutModalAnimal}
         businessInfo={businessInfo}
         onClose={() => setCutModalAnimal(null)}
-      />
-    )}
-
-    {/* 등급판정서 일괄 출력 모달 */}
-    {certModalAnimals && (
-      <GradeCertificatePrintModal
-        animals={certModalAnimals}
-        businessInfo={businessInfo}
-        onClose={() => setCertModalAnimals(null)}
       />
     )}
 
