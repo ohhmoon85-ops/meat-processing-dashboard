@@ -723,6 +723,16 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
+            {/* 사용 안내 */}
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+              <p className="font-semibold mb-1">열람용 확인서 출력 방법</p>
+              <ol className="space-y-0.5 list-decimal list-inside text-blue-700">
+                <li>개체 선택 → <strong>"원패스 열람용 확인서 열기"</strong> 클릭</li>
+                <li>열린 각 탭에서 북마크 <strong>"열람용 확인서 열기"</strong> 클릭</li>
+                <li>확인서 자동 열림 → 인쇄</li>
+              </ol>
+            </div>
+
             {/* 버튼 영역 */}
             <div className="flex gap-2 justify-end flex-wrap">
               {/* 가공생산/출고 등록 버튼 (1건 선택 시 활성) */}
