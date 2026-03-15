@@ -1,9 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { Download, FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut, Factory } from 'lucide-react';
-import { exportToExcel, generateDummyData } from '../utils/excelExport';
-import { downloadExcelReport } from '../utils/downloadExcelReport';
+import { FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut, Factory } from 'lucide-react';
 import GradeCertificatePrintModal from './GradeCertificatePrintModal';
 import CutRegistrationModal from './CutRegistrationModal';
 import SettingsModal, { BUSINESS_INFO_KEY, loadBusinessInfo, emptyBusinessInfo } from './SettingsModal';
@@ -79,11 +77,6 @@ const Dashboard: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
-
-  // 섹션 B: 농림부 보고용 조회 월
-  const [selectedMonth, setSelectedMonth] = useState<string>(
-    new Date().toISOString().slice(0, 7)
-  );
 
   // ── 메시지 표시 (3초 후 자동 해제) ─────────────────────────────
   const showMessage = (msg: Message) => {
@@ -210,7 +203,7 @@ const Dashboard: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  // ── 이미지 파일에서 바코드 인식 ──────────────────────────────
+  // ── 이미지 파일에서 바코드 인식 → ekape.or.kr 원패스 열기 ──
   const processImageFile = async (file: File) => {
     showMessage({ type: 'warning', text: '바코드 인식 중...' });
     const url = URL.createObjectURL(file);
@@ -222,7 +215,14 @@ const Dashboard: React.FC = () => {
         showMessage({ type: 'error', text: '바코드를 인식하지 못했습니다.' });
         return;
       }
-      addAnimals([{ animalNumber: value, breed: '-', birthDate: '-' }]);
+      // 12자리 이력번호 → ekape.or.kr 원패스 자동 열기
+      const digits = value.replace(/\D/g, '');
+      if (digits.length === 12) {
+        openEkapeForAnimal(digits);
+        showMessage({ type: 'success', text: `이력번호 ${digits} — 원패스 열람용 확인서로 이동합니다.` });
+      } else {
+        addAnimals([{ animalNumber: value, breed: '-', birthDate: '-' }]);
+      }
     } catch {
       showMessage({ type: 'error', text: '바코드를 인식하지 못했습니다. 이미지가 선명한지 확인해 주세요.' });
     } finally {
@@ -465,31 +465,12 @@ const Dashboard: React.FC = () => {
     setCertModalAnimals(selectedItems);
   };
 
-  // ── 농림부 보고 엑셀 다운로드 ─────────────────────────────────
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const handleDownloadExcel = async () => {
-    setIsDownloading(true);
-    try {
-      // 서버 API를 통한 DB 기반 엑셀 다운로드 시도
-      await downloadExcelReport(selectedMonth);
-    } catch (err) {
-      // API 미연결 시 기존 클라이언트 사이드 더미 데이터 폴백
-      console.warn('API 호출 실패, 클라이언트 사이드 폴백 사용:', err);
-      const dummyData = generateDummyData(20);
-      const filteredData = dummyData.filter((item) =>
-        item.productionDate.startsWith(selectedMonth)
-      );
-      if (filteredData.length === 0) {
-        alert(`${selectedMonth}에 해당하는 생산 데이터가 없습니다.`);
-        setIsDownloading(false);
-        return;
-      }
-      const fileName = `농림부_보고_${selectedMonth.replace('-', '')}.xlsx`;
-      exportToExcel(filteredData, fileName);
-    } finally {
-      setIsDownloading(false);
-    }
+  // ── 이력번호로 ekape.or.kr 원패스 열기 ──────────────────────
+  const openEkapeForAnimal = (animalNumber: string) => {
+    const digits = animalNumber.replace(/\D/g, '');
+    const formatted = digits.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
+    const url = `https://www.ekape.or.kr/kapecp/oneservicemng/oneSrvcMng/combineSearchOne.do?searchKeyword=${encodeURIComponent(formatted)}`;
+    window.open(url, '_blank');
   };
 
   const selectedCount = animalList.filter((item) => item.selected).length;
@@ -511,7 +492,7 @@ const Dashboard: React.FC = () => {
               육가공 사무 행정 자동화 대시보드
             </h1>
             <p className="text-gray-600">
-              축산물 등급판정서 출력 및 농림부 보고 자동화 시스템
+              바코드 이미지를 드래그&드롭하면 원패스 열람용 확인서로 바로 이동합니다
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -532,7 +513,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 gap-8">
           {/* ── 섹션 A: 등급판정서 일괄 출력 ── */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <div className="flex items-center mb-4">
@@ -573,9 +554,9 @@ const Dashboard: React.FC = () => {
                       엑셀 .xlsx / .csv
                     </span>
                     <span className="text-gray-300">|</span>
-                    <span className="flex items-center gap-1 text-xs text-gray-400">
+                    <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
                       <ImageIcon className="w-3 h-3" />
-                      바코드 이미지 .jpg / .png
+                      바코드 이미지 → 원패스 자동 열기
                     </span>
                     <span className="text-gray-300">|</span>
                     <span className="flex items-center gap-1 text-xs text-blue-500 font-medium">
@@ -769,71 +750,6 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* ── 섹션 B: 농림부 보고 자동화 ── */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center mb-4">
-              <Download className="w-6 h-6 text-green-600 mr-2" />
-              <h2 className="text-2xl font-semibold text-gray-800">
-                농림부 보고 자동화
-              </h2>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-sm text-gray-600 mb-4">
-                매월 5일 제출해야 하는 농림부 실적 보고서를 자동으로 생성합니다.
-              </p>
-
-              {/* 조회 월 선택 */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  조회 월 선택
-                </label>
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* 보고서 정보 */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                  생성될 보고서 정보
-                </h3>
-                <ul className="text-sm text-gray-600 space-y-1">
-                  <li>• 파일명: 농림부_보고_{selectedMonth.replace('-', '')}.xlsx</li>
-                  <li>• 조회 기간: {selectedMonth}</li>
-                  <li>
-                    • 포함 항목: 연번, 생산일자, 이력번호, 품목명, 부위명, 생산중량,
-                    보고상태, 비고
-                  </li>
-                </ul>
-              </div>
-
-              {/* 엑셀 다운로드 버튼 */}
-              <button
-                onClick={handleDownloadExcel}
-                disabled={isDownloading}
-                className={`w-full flex items-center justify-center px-6 py-4 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all ${
-                  isDownloading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-green-600 hover:bg-green-700'
-                }`}
-              >
-                <Download className="w-5 h-5 mr-2" />
-                {isDownloading ? '다운로드 중...' : '농림부 보고용 엑셀 다운로드'}
-              </button>
-            </div>
-
-            {/* 안내 사항 */}
-            <div className="mt-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
-              <p className="text-sm text-yellow-800">
-                <strong>안내:</strong> 다운로드된 엑셀 파일을 확인한 후 농림부 시스템에
-                업로드하시기 바랍니다.
-              </p>
-            </div>
-          </div>
         </div>
 
         {/* 푸터 */}
