@@ -35,11 +35,15 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     data[JOB_KEY] = job;
 
     chrome.storage.local.set(data, function () {
-      // EKAPE 탭이 이미 열려 있으면 포커스, 없으면 새로 열기
-      chrome.tabs.query({ url: '*://www.ekape.or.kr/*' }, function (tabs) {
-        if (tabs && tabs.length > 0) {
-          chrome.tabs.update(tabs[0].id, { active: true });
-          chrome.tabs.reload(tabs[0].id);
+      // EKAPE 탭이 이미 열려 있으면 해당 탭을 EKAPE_MAIN으로 이동, 없으면 새 탭
+      chrome.tabs.query({}, function (allTabs) {
+        var ekapeTab = null;
+        for (var i = 0; i < allTabs.length; i++) {
+          var url = allTabs[i].url || '';
+          if (url.includes('ekape.or.kr')) { ekapeTab = allTabs[i]; break; }
+        }
+        if (ekapeTab && ekapeTab.id) {
+          chrome.tabs.update(ekapeTab.id, { active: true, url: EKAPE_MAIN });
         } else {
           chrome.tabs.create({ url: EKAPE_MAIN });
         }
