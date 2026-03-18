@@ -364,6 +364,21 @@ async function phaseNavigateMenu(job) {
 //  FILL_ANIMAL → 소 선택, 매수인 선택, 이력번호 입력, 조회
 // ══════════════════════════════════════════════════════════════
 async function phaseFillAnimal(job) {
+  // 통합증명서신청 폼인지 확인 (매수인 또는 발급신청 텍스트 필수)
+  // combineSearchOne.do의 일반 검색창에서 잘못 실행되는 것을 방지
+  var bodyCheck = document.body.innerText;
+  if (!bodyCheck.includes('매수인') && !bodyCheck.includes('발급신청') && !bodyCheck.includes('납품처')) {
+    // 폼이 아직 로드 안 됐을 수 있으므로 최대 8초 대기
+    try {
+      await waitFor(function () {
+        var b = document.body.innerText;
+        return b.includes('매수인') || b.includes('발급신청') || b.includes('납품처');
+      }, 8000);
+    } catch (e) {
+      return; // 올바른 통합증명서신청 폼이 아님 — 실행하지 않음
+    }
+  }
+
   var animal = job.animals[job.currentIndex];
   var total  = job.animals.length;
   toast('[' + (job.currentIndex + 1) + '/' + total + '] ' +
@@ -776,12 +791,15 @@ async function main() {
       await phaseLoginWait(job);
     }
   } else if (job.phase === 'FILL_ANIMAL' || job.phase === 'CLICK_APPLY') {
+    // combineSearchOne.do(원패스 통합 검색)에서는 폼 대기 안 함 — 올바른 페이지가 아님
+    if (window.location.href.includes('combineSearchOne')) return;
+
     // 메뉴 클릭 후 새 페이지가 로드됐으나 detectPage가 REQUEST를 감지 못한 경우
-    // 이력번호 폼이 나타날 때까지 MutationObserver로 대기
+    // 매수인/발급신청 폼이 나타날 때까지 MutationObserver로 대기
     toast('통합증명서신청 폼 대기 중...', 'info', 3000);
     var fillObs = new MutationObserver(async function () {
       var b = document.body.innerText;
-      if (b.includes('이력번호') || b.includes('개체번호')) {
+      if (b.includes('매수인') || b.includes('발급신청')) {
         fillObs.disconnect();
         clearTimeout(fillObsTimeout);
         var freshJob = await getJob();
@@ -801,7 +819,7 @@ async function main() {
     // 이미 폼이 있으면 즉시 처리
     await sleep(600);
     var bodyNow = document.body.innerText;
-    if (bodyNow.includes('이력번호') || bodyNow.includes('개체번호')) {
+    if (bodyNow.includes('매수인') || bodyNow.includes('발급신청')) {
       fillObs.disconnect();
       clearTimeout(fillObsTimeout);
       await phaseFillAnimal(job);
