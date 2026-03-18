@@ -207,18 +207,21 @@ function transition(job, newPhase, extra) {
 // ── 페이지 타입 감지 ─────────────────────────────────────────
 function detectPage() {
   var body = document.body ? document.body.innerText : '';
+  var url  = window.location.href;
+
   // 발급신청 팝업 (window.opener 있음 + 납품처/부위 관련 텍스트)
   if (window.opener && (body.includes('납품처') || body.includes('부위') || body.includes('발급신청'))) {
     return 'POPUP';
   }
-  // 통합증명서신청 페이지: 이력번호 입력 폼이 있으면 REQUEST
-  // (매수인 텍스트가 없더라도 이력번호+통합증명서 조합으로 판단)
-  if (body.includes('이력번호') || body.includes('개체번호')) {
-    return 'REQUEST';
-  }
-  // 통합증명서발급 목록 페이지
+  // 통합증명서발급 목록 페이지 (REQUEST보다 먼저 체크)
   if (body.includes('통합증명서') && (body.includes('확인서 발행') || body.includes('발급목록'))) {
     return 'LIST';
+  }
+  // 통합증명서신청 페이지:
+  //   · combineSearchOne.do(원패스 기본 검색)에도 "이력번호"가 있으므로 URL로 제외
+  //   · 이력번호/개체번호 입력 폼이 있는 페이지
+  if (!url.includes('combineSearchOne') && (body.includes('이력번호') || body.includes('개체번호'))) {
+    return 'REQUEST';
   }
   return 'OTHER';
 }
