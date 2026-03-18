@@ -20,15 +20,6 @@
       "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": true
-    },
-    {
-      "matches": [
-        "http://localhost:*/*",
-        "https://*.vercel.app/*",
-        "https://*.netlify.app/*"
-      ],
-      "js": ["bridge.js"],
-      "run_at": "document_idle"
     }
   ],
   "externally_connectable": {
