@@ -62,6 +62,56 @@ const CORS_HEADERS = {
   'Content-Type': 'application/json',
 };
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  retries = 3,
+  backoffMs = 1000
+): Promise<Response> {
+  try {
+    const res = await fetch(url, options);
+    if (res.status === 429 || res.status === 503) {
+      if (retries > 0) {
+        const retryAfter = res.headers.get('retry-after');
+        const waitMs = retryAfter ? Number(retryAfter) * 1000 : backoffMs;
+        await sleep(waitMs);
+        return fetchWithRetry(url, options, retries - 1, backoffMs * 2);
+      }
+    }
+    return res;
+  } catch (err) {
+    if (retries > 0) {
+      await sleep(backoffMs);
+      return fetchWithRetry(url, options, retries - 1, backoffMs * 2);
+    }
+    throw err;
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  fn: (item: T, index: number) => Promise<R>,
+  concurrency = 3
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= items.length) break;
+      results[i] = await fn(items[i], i);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
 function jsonRes(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: CORS_HEADERS });
 }
@@ -108,9 +158,11 @@ export default async function handler(req: Request): Promise<Response> {
       return jsonRes({ error: '해당 이력번호의 등급판정 기록이 없습니다.', animalNo }, 404);
     }
 
-    // ── 2단계: EKAPE /confirm/cattle 직접 조회 (Step 1과 동일한 방식) ──
-    const gradeResults = await Promise.all(
-      issueItems.map(async (issueItem) => {
+    // ── 2단계: EKAPE /confirm/cattle 직접 조회 (Step 1과 동일한 방식)
+    // 동시 요청 수를 제한하여 Rate Limit에 걸릴 가능성을 줄임
+    const gradeResults = await mapWithConcurrency(
+      issueItems,
+      async (issueItem) => {
         const issueNo = String(issueItem.issueNo ?? '').trim();
 
         if (!issueNo) {
@@ -127,11 +179,21 @@ export default async function handler(req: Request): Promise<Response> {
 
         try {
           const fetchRes = await Promise.race([
-            fetch(cattleUrl),
+            fetchWithRetry(cattleUrl),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('timeout_20s')), 20000)
             ),
           ]);
+
+          if (fetchRes.status === 429 || fetchRes.status === 503) {
+            const retryAfter = fetchRes.headers.get('retry-after');
+            return {
+              issueNo,
+              items: [] as unknown[],
+              debug: `cattle fetch: rate limit ${fetchRes.status} (retry-after: ${retryAfter ?? 'none'})`,
+            };
+          }
+
           const xmlText = await fetchRes.text();
           const items = extractItems(xmlText);
           return { issueNo, items, debug: undefined };
@@ -139,7 +201,8 @@ export default async function handler(req: Request): Promise<Response> {
           const msg = e instanceof Error ? e.message : String(e);
           return { issueNo, items: [] as unknown[], debug: `cattle fetch: ${msg}` };
         }
-      })
+      },
+      3
     );
 
     const gradeInfo = gradeResults.flatMap((r) => r.items);

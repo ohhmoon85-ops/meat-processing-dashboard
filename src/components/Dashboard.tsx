@@ -484,7 +484,16 @@ const Dashboard: React.FC = () => {
       if (e.data.ok) {
         showMessage({ type: 'success', text: `통합증명서 발급 작업 시작 (${animals.length}건). EKAPE 탭에서 로그인 후 자동 진행됩니다.` });
       } else {
-        alert('Chrome Extension이 응답하지 않습니다.\nekape-extension 폴더를 Chrome에 로드했는지 확인해 주세요.\n\n오류: ' + (e.data.error ?? '알 수 없음'));
+        const errMsg = e.data.error ?? '알 수 없음';
+        const isContextInvalidated = errMsg.includes('컨텍스트') || errMsg.includes('context') || errMsg.includes('invalidated');
+        if (isContextInvalidated) {
+          const reload = window.confirm(
+            '확장 프로그램이 업데이트됐거나 재시작됐습니다.\n\n이 페이지를 새로고침(F5)하면 다시 사용할 수 있습니다.\n\n지금 새로고침하시겠습니까?'
+          );
+          if (reload) window.location.reload();
+        } else {
+          alert('Chrome Extension이 응답하지 않습니다.\nekape-extension 폴더를 Chrome에 로드했는지 확인해 주세요.\n\n오류: ' + errMsg);
+        }
       }
     };
     window.addEventListener('message', handler);
