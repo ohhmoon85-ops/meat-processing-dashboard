@@ -477,41 +477,31 @@ const Dashboard: React.FC = () => {
       processingType: item.processingType ?? '',
     }));
 
-    // bridge.js 통해 Extension으로 전달
-    let handled = false;
+    // externally_connectable로 Extension background에 직접 전달 (bridge.js 불필요)
+    const EKAPE_EXT_ID = 'ahgjhcnofckkgcchgmbkccjpfopkolef';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cr = (window as any).chrome;
+    if (!cr?.runtime?.sendMessage) {
+      alert('Chrome Extension을 찾을 수 없습니다.\nekape-extension 폴더를 Chrome에 로드했는지 확인해 주세요.');
+      return;
+    }
 
-    const handler = (e: MessageEvent) => {
-      if (!e.data?.__ekapeResp) return;
-      handled = true;
-      window.removeEventListener('message', handler);
-      if (e.data.ok) {
-        showMessage({ type: 'success', text: `통합증명서 발급 작업 시작 (${animals.length}건). EKAPE 탭에서 로그인 후 자동 진행됩니다.` });
-      } else {
-        const errMsg = e.data.error ?? '알 수 없음';
-        const isContextInvalidated = errMsg.includes('컨텍스트') || errMsg.includes('context') || errMsg.includes('invalidated');
-        if (isContextInvalidated) {
-          const reload = window.confirm(
-            '확장 프로그램이 업데이트됐거나 재시작됐습니다.\n\n이 페이지를 새로고침(F5)하면 다시 사용할 수 있습니다.\n\n지금 새로고침하시겠습니까?'
-          );
-          if (reload) window.location.reload();
+    cr.runtime.sendMessage(
+      EKAPE_EXT_ID,
+      { type: 'START_ISSUE_JOB', animals },
+      (response: { ok: boolean; error?: string } | undefined) => {
+        if (cr.runtime.lastError) {
+          alert('확장 프로그램 오류: ' + (cr.runtime.lastError.message ?? '') +
+            '\n\nekape-extension 폴더를 Chrome에 로드했는지 확인해 주세요.');
+          return;
+        }
+        if (response?.ok) {
+          showMessage({ type: 'success', text: `통합증명서 발급 작업 시작 (${animals.length}건). EKAPE 탭에서 로그인 후 자동 진행됩니다.` });
         } else {
-          alert('Chrome Extension이 응답하지 않습니다.\nekape-extension 폴더를 Chrome에 로드했는지 확인해 주세요.\n\n오류: ' + errMsg);
+          alert('오류: ' + (response?.error ?? '알 수 없음'));
         }
       }
-    };
-    window.addEventListener('message', handler);
-
-    // 4초 내 응답 없으면 컨텍스트 무효화로 간주 → 재로드 안내
-    setTimeout(() => {
-      if (handled) return;
-      window.removeEventListener('message', handler);
-      const reload = window.confirm(
-        '확장 프로그램이 응답하지 않습니다.\n\n확장 프로그램이 재시작됐을 수 있습니다.\n이 페이지를 새로고침(F5)하면 다시 사용할 수 있습니다.\n\n지금 새로고침하시겠습니까?'
-      );
-      if (reload) window.location.reload();
-    }, 4000);
-
-    window.postMessage({ __ekape: true, type: 'START_ISSUE_JOB', animals }, '*');
+    );
   };
 
   // ── 원패스 열람용 확인서 일괄 열기 ───────────────────────────

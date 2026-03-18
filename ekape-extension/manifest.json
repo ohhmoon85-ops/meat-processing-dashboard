@@ -31,6 +31,13 @@
       "run_at": "document_idle"
     }
   ],
+  "externally_connectable": {
+    "matches": [
+      "https://meat-processing-dashboard.vercel.app/*",
+      "https://*.vercel.app/*",
+      "http://localhost:*/*"
+    ]
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "EKAPE 원패스 자동화"

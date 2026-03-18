@@ -1,7 +1,7 @@
 'use strict';
 /**
  * EKAPE 원패스 자동화 — Background Service Worker
- * - 대시보드(bridge.js)로부터 START_ISSUE_JOB 수신
+ * - 대시보드로부터 메시지 수신 (onMessage: bridge.js / onMessageExternal: 직접 연결)
  * - chrome.storage.local에 작업 저장
  * - EKAPE 원패스 탭 열기/포커스
  */
@@ -9,8 +9,8 @@
 const JOB_KEY = 'ekape_issue_job';
 const EKAPE_MAIN = 'https://www.ekape.or.kr/kapecp/oneservicemng/oneSrvcMng/combineSearchOne.do';
 
-// ── 대시보드(bridge.js)로부터 내부 메시지 수신 ──────────────
-chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+// ── 메시지 처리 공통 로직 ─────────────────────────────────────
+function handleMessage(message, sendResponse) {
 
   // ── 작업 시작 ──────────────────────────────────────────────
   if (message.type === 'START_ISSUE_JOB') {
@@ -74,4 +74,14 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     });
     return true;
   }
+}
+
+// ── 내부 메시지 (bridge.js content script) ───────────────────
+chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+  return handleMessage(message, sendResponse);
+});
+
+// ── 외부 메시지 (대시보드 웹페이지 직접 연결) ───────────────
+chrome.runtime.onMessageExternal.addListener(function (message, sender, sendResponse) {
+  return handleMessage(message, sendResponse);
 });

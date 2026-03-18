@@ -314,25 +314,36 @@ async function phaseNavigateMenu(job) {
   var subEl = findByText(['a', 'li', 'span', 'td'], ['통합증명서신청', '통합증명서 신청']);
   if (subEl) {
     subEl.click();
-    toast('통합증명서신청 페이지 로딩 중...', 'info');
-    // 폼이 로드되길 기다림
-    try {
-      await waitFor(function () {
-        return document.body.innerText.includes('이력번호') &&
-               document.body.innerText.includes('매수인');
-      }, 10000);
-      transition(job, 'FILL_ANIMAL');
-      phaseFillAnimal(job);
-    } catch (e) {
-      toast('통합증명서신청 페이지를 찾지 못했습니다. 수동으로 메뉴를 클릭해 주세요.', 'warn', 0);
-    }
+    toast('통합증명서신청 메뉴 클릭! 페이지 이동 중...', 'info');
+
+    // 즉시 FILL_ANIMAL로 전환
+    // → 전체 페이지 이동이면 새 content.js가 이 phase를 이어받음
+    // → iframe이면 해당 frame의 content.js가 이어받음
+    // → AJAX면 아래 MutationObserver가 감지해 처리
+    transition(job, 'FILL_ANIMAL');
+
+    var obs = new MutationObserver(async function () {
+      if (document.body.innerText.includes('이력번호') && document.body.innerText.includes('매수인')) {
+        obs.disconnect();
+        clearTimeout(obsTimeout);
+        var freshJob = await getJob();
+        if (freshJob && freshJob.status === 'running' && freshJob.phase === 'FILL_ANIMAL') {
+          toast('통합증명서신청 폼 감지!', 'ok');
+          await sleep(500);
+          phaseFillAnimal(freshJob);
+        }
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    // 20초 후 observer 해제 (iframe/전체이동으로 이미 처리됐을 수 있음)
+    var obsTimeout = setTimeout(function () { obs.disconnect(); }, 20000);
     return;
   }
 
   // 메뉴를 찾지 못한 경우 사용자에게 안내
-  toast('메뉴를 찾지 못했습니다. 통합증명서발행 > 통합증명서신청을 수동으로 클릭해 주세요.\n클릭 후 이 안내는 자동으로 사라집니다.', 'warn', 0);
+  toast('메뉴를 찾지 못했습니다. 통합증명서발행 > 통합증명서신청을 수동으로 클릭해 주세요.', 'warn', 0);
 
-  // 페이지가 바뀌길 감지 (MutationObserver)
+  // 수동 클릭 후 페이지 감지
   var observer = new MutationObserver(async function () {
     if (document.body.innerText.includes('이력번호') && document.body.innerText.includes('매수인')) {
       observer.disconnect();
