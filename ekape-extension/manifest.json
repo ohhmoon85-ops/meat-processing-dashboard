@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "EKAPE 원패스 자동화",
+  "version": "2.0.0",
+  "description": "통합증명서 발급 신청부터 인쇄까지 자동화합니다. 로그인만 수동으로 하세요.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "*://www.ekape.or.kr/*",
+    "*://ekape.or.kr/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.ekape.or.kr/*",
+        "*://ekape.or.kr/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://localhost:*/*",
+        "https://*.vercel.app/*",
+        "https://*.netlify.app/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "EKAPE 원패스 자동화"
+  }
+}

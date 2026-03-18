@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut, Factory } from 'lucide-react';
+import { FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut, Factory, ClipboardCheck } from 'lucide-react';
 import CutRegistrationModal from './CutRegistrationModal';
 import SettingsModal, { BUSINESS_INFO_KEY, loadBusinessInfo, emptyBusinessInfo } from './SettingsModal';
 import type { BusinessInfo } from './SettingsModal';
@@ -461,6 +461,40 @@ const Dashboard: React.FC = () => {
     window.open(url, '_blank');
   };
 
+  // ── 원패스 통합증명서 발급 자동화 시작 ──────────────────────
+  const handleStartIssueJob = () => {
+    const selectedItems = animalList.filter((item) => item.selected);
+    if (selectedItems.length === 0) {
+      alert('통합증명서를 발급할 개체를 선택해 주세요.');
+      return;
+    }
+
+    const animals = selectedItems.map((item) => ({
+      animalNumber: item.animalNumber.replace(/[-\s]/g, ''),
+      destination:  item.destination  ?? '',
+      cutName:      item.cutName      ?? '',
+      weightKg:     (item.weightKg    ?? '').replace(/[^\d.]/g, ''),
+      processingType: item.processingType ?? '',
+    }));
+
+    // bridge.js 통해 Extension으로 전달
+    const handler = (e: MessageEvent) => {
+      if (!e.data?.__ekapeResp) return;
+      window.removeEventListener('message', handler);
+      if (e.data.ok) {
+        showMessage({ type: 'success', text: `통합증명서 발급 작업 시작 (${animals.length}건). EKAPE 탭에서 로그인 후 자동 진행됩니다.` });
+      } else {
+        alert('Chrome Extension이 응답하지 않습니다.\nekape-extension 폴더를 Chrome에 로드했는지 확인해 주세요.\n\n오류: ' + (e.data.error ?? '알 수 없음'));
+      }
+    };
+    window.addEventListener('message', handler);
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+    }, 4000);
+
+    window.postMessage({ __ekape: true, type: 'START_ISSUE_JOB', animals }, '*');
+  };
+
   // ── 원패스 열람용 확인서 일괄 열기 ───────────────────────────
   const handleOpenEkapeBatch = () => {
     const selectedItems = animalList.filter((item) => item.selected);
@@ -748,6 +782,25 @@ const Dashboard: React.FC = () => {
               >
                 <Factory className="w-4 h-4 mr-1.5" />
                 가공생산/출고 등록
+              </button>
+              {/* 원패스 통합증명서 발급 자동화 버튼 */}
+              <button
+                onClick={handleStartIssueJob}
+                disabled={selectedCount === 0}
+                title="선택한 개체의 통합증명서 발급신청을 자동으로 처리합니다 (Chrome Extension 필요)"
+                className={`flex items-center px-5 py-3 rounded-lg font-semibold transition-all text-sm ${
+                  selectedCount === 0
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md hover:shadow-lg'
+                }`}
+              >
+                <ClipboardCheck className="w-4 h-4 mr-1.5" />
+                통합증명서 발급 자동화
+                {selectedCount > 0 && (
+                  <span className="ml-2 bg-white text-emerald-600 rounded-full text-xs px-2 py-0.5 font-bold">
+                    {selectedCount}
+                  </span>
+                )}
               </button>
               {/* 원패스 열람용 확인서 일괄 열기 버튼 */}
               <button
