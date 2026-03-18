@@ -478,8 +478,11 @@ const Dashboard: React.FC = () => {
     }));
 
     // bridge.js 통해 Extension으로 전달
+    let handled = false;
+
     const handler = (e: MessageEvent) => {
       if (!e.data?.__ekapeResp) return;
+      handled = true;
       window.removeEventListener('message', handler);
       if (e.data.ok) {
         showMessage({ type: 'success', text: `통합증명서 발급 작업 시작 (${animals.length}건). EKAPE 탭에서 로그인 후 자동 진행됩니다.` });
@@ -497,8 +500,15 @@ const Dashboard: React.FC = () => {
       }
     };
     window.addEventListener('message', handler);
+
+    // 4초 내 응답 없으면 컨텍스트 무효화로 간주 → 재로드 안내
     setTimeout(() => {
+      if (handled) return;
       window.removeEventListener('message', handler);
+      const reload = window.confirm(
+        '확장 프로그램이 응답하지 않습니다.\n\n확장 프로그램이 재시작됐을 수 있습니다.\n이 페이지를 새로고침(F5)하면 다시 사용할 수 있습니다.\n\n지금 새로고침하시겠습니까?'
+      );
+      if (reload) window.location.reload();
     }, 4000);
 
     window.postMessage({ __ekape: true, type: 'START_ISSUE_JOB', animals }, '*');
