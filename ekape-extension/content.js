@@ -159,9 +159,27 @@ function todayStr() {
 
 // ── 로그인 확인 ───────────────────────────────────────────────
 function isLoggedIn() {
-  var checks = ['a[href*="logout"]', 'a[href*="logOut"]', '[onclick*="logout"]',
-                '.logout', '#logout', '.user-name', '#userNm', '.mypage'];
-  return checks.some(function (s) { return !!document.querySelector(s); });
+  // 1. 선택자 기반 (logout 링크, 사용자 정보 영역)
+  var checks = [
+    'a[href*="logout"]', 'a[href*="logOut"]', 'a[href*="Logout"]',
+    '[onclick*="logout"]', '[onclick*="logOut"]',
+    '.logout', '#logout', '.user-name', '#userNm', '.mypage',
+    'a[href*="mypage"]', 'a[href*="myPage"]',
+  ];
+  if (checks.some(function (s) { return !!document.querySelector(s); })) return true;
+
+  // 2. 텍스트 기반 — 로그아웃·마이페이지 링크가 보이면 로그인 상태
+  var links = document.querySelectorAll('a');
+  for (var i = 0; i < links.length; i++) {
+    var t = links[i].textContent.trim();
+    if (t === '로그아웃' || t === '마이페이지' || t === '로그 아웃') return true;
+  }
+
+  // 3. 통합증명서발행 메뉴가 보이면 로그인 상태 (로그인 후에만 노출되는 메뉴)
+  var body = document.body ? document.body.innerText : '';
+  if (body.includes('통합증명서발행') || body.includes('통합증명서 발행')) return true;
+
+  return false;
 }
 
 // ── chrome.storage 저장/로드 ─────────────────────────────────
@@ -208,30 +226,74 @@ function detectPage() {
 //  LOGIN_WAIT → NAVIGATE_MENU
 // ══════════════════════════════════════════════════════════════
 async function phaseLoginWait(job) {
+  var goNext = async function () {
+    transition(job, 'NAVIGATE_MENU');
+    phaseNavigateMenu(job);
+  };
+
   // 이미 로그인 되어 있으면 바로 이동
   if (isLoggedIn()) {
     toast('로그인 확인! 메뉴로 이동합니다.', 'ok');
     await sleep(800);
-    transition(job, 'NAVIGATE_MENU');
-    phaseNavigateMenu(job);
+    goNext();
     return;
   }
-  toast('EKAPE 원패스에 로그인해 주세요. 로그인 후 자동으로 진행됩니다.', 'info', 0);
 
-  var retries = 0;
+  // 로그인 안내 토스트 + 수동 "계속" 버튼
+  showLoginToast(job, goNext);
+
+  // 5초마다 자동 감지 시도
   var timer = setInterval(async function () {
-    retries++;
     if (isLoggedIn()) {
       clearInterval(timer);
-      toast('로그인 확인! 메뉴로 이동합니다.', 'ok');
-      await sleep(1000);
-      transition(job, 'NAVIGATE_MENU');
-      phaseNavigateMenu(job);
-    } else if (retries > 120) { // 10분
-      clearInterval(timer);
-      toast('로그인 대기 시간 초과. 수동으로 진행해 주세요.', 'err');
+      var prev = document.getElementById('_ekape_toast');
+      if (prev) prev.remove();
+      toast('로그인 감지! 메뉴로 이동합니다.', 'ok');
+      await sleep(800);
+      goNext();
     }
   }, 5000);
+}
+
+// ── 로그인 대기 토스트 (수동 "계속" 버튼 포함) ───────────────
+function showLoginToast(job, goNext) {
+  var prev = document.getElementById('_ekape_toast');
+  if (prev) prev.remove();
+
+  var div = document.createElement('div');
+  div.id = '_ekape_toast';
+  Object.assign(div.style, {
+    position: 'fixed', top: '14px', right: '14px', zIndex: '2147483647',
+    background: '#1d4ed8', color: '#fff',
+    border: '2px solid rgba(255,255,255,.25)', borderRadius: '10px',
+    padding: '12px 16px', fontSize: '13px',
+    fontFamily: '\'Malgun Gothic\', sans-serif',
+    boxShadow: '0 6px 20px rgba(0,0,0,.35)',
+    display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px',
+  });
+
+  var total = job.animals ? job.animals.length : 0;
+  div.innerHTML =
+    '<div style="display:flex;align-items:center;gap:8px;font-weight:700">' +
+      '<span style="font-size:18px">🤖</span>' +
+      '<span>EKAPE 원패스에 로그인해 주세요<br>' +
+      '<small style="font-weight:400;opacity:.85">로그인 후 아래 버튼을 클릭하면<br>' +
+      total + '건 통합증명서 신청을 자동으로 진행합니다</small></span>' +
+    '</div>' +
+    '<button id="_ekape_continue_btn" style="' +
+      'padding:8px 12px;background:#fff;color:#1d4ed8;border:none;' +
+      'border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;' +
+      'width:100%;letter-spacing:.3px' +
+    '">✅ 로그인 완료 → 자동화 시작</button>';
+
+  document.body.appendChild(div);
+
+  document.getElementById('_ekape_continue_btn').addEventListener('click', async function () {
+    div.remove();
+    toast('자동화 시작!', 'ok');
+    await sleep(500);
+    goNext();
+  });
 }
 
 // ══════════════════════════════════════════════════════════════
