@@ -211,8 +211,9 @@ function detectPage() {
   if (window.opener && (body.includes('납품처') || body.includes('부위') || body.includes('발급신청'))) {
     return 'POPUP';
   }
-  // 통합증명서신청 페이지 (이력번호 입력 폼 + 매수인 라디오)
-  if (body.includes('통합증명서') && body.includes('이력번호') && body.includes('매수인')) {
+  // 통합증명서신청 페이지: 이력번호 입력 폼이 있으면 REQUEST
+  // (매수인 텍스트가 없더라도 이력번호+통합증명서 조합으로 판단)
+  if (body.includes('이력번호') || body.includes('개체번호')) {
     return 'REQUEST';
   }
   // 통합증명서발급 목록 페이지
@@ -770,6 +771,37 @@ async function main() {
       await phaseNavigateMenu(job);
     } else {
       await phaseLoginWait(job);
+    }
+  } else if (job.phase === 'FILL_ANIMAL' || job.phase === 'CLICK_APPLY') {
+    // 메뉴 클릭 후 새 페이지가 로드됐으나 detectPage가 REQUEST를 감지 못한 경우
+    // 이력번호 폼이 나타날 때까지 MutationObserver로 대기
+    toast('통합증명서신청 폼 대기 중...', 'info', 3000);
+    var fillObs = new MutationObserver(async function () {
+      var b = document.body.innerText;
+      if (b.includes('이력번호') || b.includes('개체번호')) {
+        fillObs.disconnect();
+        clearTimeout(fillObsTimeout);
+        var freshJob = await getJob();
+        if (freshJob && freshJob.status === 'running') {
+          toast('통합증명서신청 폼 감지!', 'ok');
+          await sleep(500);
+          await phaseFillAnimal(freshJob);
+        }
+      }
+    });
+    fillObs.observe(document.body, { childList: true, subtree: true, characterData: true });
+    var fillObsTimeout = setTimeout(function () {
+      fillObs.disconnect();
+      toast('통합증명서신청 폼을 찾지 못했습니다. 수동으로 통합증명서신청 페이지로 이동해 주세요.', 'warn', 0);
+    }, 30000);
+
+    // 이미 폼이 있으면 즉시 처리
+    await sleep(600);
+    var bodyNow = document.body.innerText;
+    if (bodyNow.includes('이력번호') || bodyNow.includes('개체번호')) {
+      fillObs.disconnect();
+      clearTimeout(fillObsTimeout);
+      await phaseFillAnimal(job);
     }
   }
 }
