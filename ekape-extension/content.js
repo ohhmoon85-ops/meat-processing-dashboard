@@ -809,5 +809,37 @@ async function main() {
   }
 }
 
+// ── storage 변경 감지: 모든 프레임(iframe 포함)에서 phase 전환 즉시 반응 ──
+// main()은 페이지 첫 로드 시 1회만 실행되므로,
+// 다른 프레임에서 phase가 바뀌면 이 리스너가 해당 프레임의 처리를 맡음
+chrome.storage.onChanged.addListener(async function (changes, area) {
+  if (area !== 'local' || !changes[JOB_KEY]) return;
+  var newJob = changes[JOB_KEY].newValue;
+  if (!newJob || newJob.status !== 'running') return;
+
+  var page = detectPage();
+
+  // FILL_ANIMAL로 전환됐고, 이 프레임이 REQUEST 페이지면 즉시 처리
+  if (newJob.phase === 'FILL_ANIMAL' && page === 'REQUEST') {
+    await sleep(800);
+    var freshJob = await getJob();
+    if (freshJob && freshJob.status === 'running' && freshJob.phase === 'FILL_ANIMAL') {
+      toast('폼 감지 (프레임)! 자동 입력 시작...', 'ok');
+      await phaseFillAnimal(freshJob);
+    }
+    return;
+  }
+
+  // NAVIGATE_LIST로 전환됐고, 이 프레임이 LIST 페이지면 즉시 처리
+  if (newJob.phase === 'NAVIGATE_LIST' && page === 'LIST') {
+    await sleep(800);
+    var freshJob2 = await getJob();
+    if (freshJob2 && freshJob2.status === 'running' && freshJob2.phase === 'NAVIGATE_LIST') {
+      await phaseSelectPrint(freshJob2);
+    }
+    return;
+  }
+});
+
 // 실행
 main();
