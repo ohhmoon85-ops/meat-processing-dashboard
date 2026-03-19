@@ -42,31 +42,9 @@ const Dashboard: React.FC = () => {
   const [barcodeInput, setBarcodeInput] = useState('');
   const [message, setMessage] = useState<Message>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [cutModalAnimal, setCutModalAnimal] = useState<AnimalData | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [businessInfo, setBusinessInfo] = useState<BusinessInfo>(loadBusinessInfo);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  // ── 마운트 시 Supabase 메타데이터 → localStorage → 상태 동기화 ─────
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.user_metadata?.businessInfo) {
-        const info: BusinessInfo = { ...emptyBusinessInfo(), ...(user.user_metadata.businessInfo as BusinessInfo) };
-        setBusinessInfo(info);
-        localStorage.setItem(BUSINESS_INFO_KEY, JSON.stringify(info));
-      }
-    });
-  }, []);
-
-  // ── 업체 설정 저장 (Supabase 메타데이터 + localStorage 동시 저장) ──
-  const handleSaveSettings = async (info: BusinessInfo) => {
-    setBusinessInfo(info);
-    localStorage.setItem(BUSINESS_INFO_KEY, JSON.stringify(info));
-    await supabase.auth.updateUser({ data: { businessInfo: info } });
-    setShowSettings(false);
-  };
 
   // ── 로그아웃 ─────────────────────────────────────────────────────
   const handleLogout = async () => {
@@ -807,24 +785,7 @@ const Dashboard: React.FC = () => {
       </div>
     </div>
 
-    {/* 가공생산 / 출고 등록 모달 */}
-    {cutModalAnimal && (
-      <CutRegistrationModal
-        animal={cutModalAnimal}
-        businessInfo={businessInfo}
-        onClose={() => setCutModalAnimal(null)}
-      />
-    )}
-
-    {/* 업체 설정 모달 */}
-    {showSettings && (
-      <SettingsModal
-        initialInfo={businessInfo}
-        onSave={handleSaveSettings}
-        onClose={() => setShowSettings(false)}
-      />
-    )}
-    </>
+</>
   );
 };
 
