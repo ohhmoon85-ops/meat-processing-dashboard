@@ -38,12 +38,23 @@ function handleMessage(message, sendResponse) {
       // EKAPE 탭이 이미 열려 있으면 해당 탭을 EKAPE_MAIN으로 이동, 없으면 새 탭
       chrome.tabs.query({}, function (allTabs) {
         var ekapeTab = null;
+        // 1순위: 원패스 SPA 메인 (index.html) 탭
         for (var i = 0; i < allTabs.length; i++) {
           var url = allTabs[i].url || '';
-          if (url.includes('ekape.or.kr')) { ekapeTab = allTabs[i]; break; }
+          if (url.includes('ekape.or.kr') && url.includes('index.html')) {
+            ekapeTab = allTabs[i]; break;
+          }
+        }
+        // 2순위: 기타 ekape.or.kr 탭 (팝업 제외 — 팝업은 openerTabId 있음)
+        if (!ekapeTab) {
+          for (var j = 0; j < allTabs.length; j++) {
+            var u = allTabs[j].url || '';
+            if (u.includes('ekape.or.kr') && !allTabs[j].openerTabId) {
+              ekapeTab = allTabs[j]; break;
+            }
+          }
         }
         if (ekapeTab && ekapeTab.id) {
-          // 기존 EKAPE 탭은 URL 변경 없이 포커스만 (사용자 현재 페이지 유지)
           chrome.tabs.update(ekapeTab.id, { active: true });
         } else {
           chrome.tabs.create({ url: EKAPE_MAIN });

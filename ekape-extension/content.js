@@ -209,8 +209,10 @@ function transition(job, newPhase, extra) {
 function detectPage() {
   var body = document.body ? document.body.innerText : '';
 
-  // 발급신청 팝업 (별도 창 → window.opener 있음)
-  if (window.opener) {
+  // 발급신청 팝업: window.opener 있고 납품처구분/발급신청정보 텍스트 있음
+  // (등급판정확인서 열람 팝업 등 다른 팝업과 구별)
+  if (window.opener &&
+      (body.includes('납품처구분') || body.includes('발급신청정보') || body.includes('확인서발급신청'))) {
     return 'POPUP';
   }
   // 통합증명서발급현황 페이지: '신청구분' 없고 '통합증명서발급현황' 또는 확인서원본발행 버튼
