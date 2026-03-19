@@ -537,7 +537,7 @@ const Dashboard: React.FC = () => {
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-4xl font-bold text-gray-800 mb-2">
-              육가공 사무 행정 자동화 대시보드
+              육가공 행정 자동화
             </h1>
             <p className="text-gray-600">
               바코드 이미지를 드래그&드롭하면 원패스 열람용 확인서로 바로 이동합니다
