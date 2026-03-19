@@ -1,10 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, Settings, LogOut, Factory, ClipboardCheck } from 'lucide-react';
-import CutRegistrationModal from './CutRegistrationModal';
-import SettingsModal, { BUSINESS_INFO_KEY, loadBusinessInfo, emptyBusinessInfo } from './SettingsModal';
-import type { BusinessInfo } from './SettingsModal';
+import { FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, LogOut, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 // 개체번호 데이터 타입
@@ -441,16 +438,6 @@ const Dashboard: React.FC = () => {
       setAnimalList([]);
       showMessage({ type: 'success', text: '목록을 초기화했습니다.' });
     }
-  };
-
-  // ── 가공생산/출고 등록 ────────────────────────────────────────────────
-  const handleCutRegistration = () => {
-    const selected = animalList.filter((item) => item.selected);
-    if (selected.length !== 1) {
-      alert('가공생산/출고 등록은 개체를 1건만 선택해 주세요.');
-      return;
-    }
-    setCutModalAnimal(selected[0]);
   };
 
   // ── 이력번호로 ekape.or.kr 원패스 열기 ──────────────────────
