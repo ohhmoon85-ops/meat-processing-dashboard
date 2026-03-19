@@ -418,54 +418,29 @@ async function phaseFillAnimal(job) {
 
   if (lsNoInput) {
     setVal(lsNoInput, animal.animalNumber);
+    await sleep(300);
+    // 이력번호 input에 포커스 (사용자가 바로 조회 클릭할 수 있도록)
+    lsNoInput.focus();
   } else {
     toast('[' + animal.animalNumber + '] 이력번호 입력 필드를 찾지 못했습니다.', 'warn');
   }
-  await sleep(400);
 
-  // ④ 조회 버튼 클릭
-  var queryBtn = findByText(['button'], ['조회']);
-  if (queryBtn) {
-    queryBtn.click();
-    toast('조회 중...', 'info', 3000);
-  }
+  // ── 여기서 자동화 중단 ──
+  // 이후 조회 → 결과 행 클릭 → 팝업 입력 → 발급신청은 수동으로 진행
+  // 팝업이 닫히면 다음 동물로 자동 이동
+  var remaining = job.animals.length - job.currentIndex - 1;
+  var remainMsg = remaining > 0 ? ' (이후 ' + remaining + '건 자동 이동)' : ' (마지막 건)';
 
-  // ⑤ 결과 행이 나타날 때까지 대기 후 첫 번째 행 클릭 → 팝업 열림
-  try {
-    await waitFor(function () {
-      var tbody = document.querySelector('table tbody');
-      if (!tbody) return false;
-      var rows = tbody.querySelectorAll('tr');
-      return rows.length > 0 && rows[0].textContent.trim().length > 5;
-    }, 10000);
-    await sleep(600);
+  transition(job, 'CLICK_APPLY');
+  _popupRef = null;
 
-    var tbody = document.querySelector('table tbody');
-    var firstRow = tbody ? tbody.querySelector('tr') : null;
-    if (firstRow) {
-      _popupRef = null;
-      transition(job, 'CLICK_APPLY');
-      firstRow.click(); // 행 클릭 → 팝업 열림
+  // 수동 발급신청 안내 토스트
+  toast('✅ [' + (job.currentIndex + 1) + '/' + job.animals.length + '] 이력번호 입력 완료' + remainMsg +
+        '\n▶ 조회 → 결과 행 클릭 → 팝업 입력 → 발급신청을 수동으로 진행하세요.\n팝업을 닫으면 다음 동물로 자동 이동합니다.',
+        'ok', 0);
 
-      // 팝업 열림 확인
-      var waited = 0;
-      var popupTimer = setInterval(function () {
-        waited += 300;
-        if (_popupRef && !_popupRef.closed) {
-          clearInterval(popupTimer);
-          toast('발급신청 팝업 열림!', 'info');
-          waitForPopupClose(job);
-        } else if (waited > 5000) {
-          clearInterval(popupTimer);
-          toast('팝업이 열리지 않았습니다. 팝업 차단 해제 후 결과 행을 클릭해 주세요.', 'warn', 0);
-          waitForManualApply(job);
-        }
-      }, 300);
-    }
-  } catch (e) {
-    toast('[' + animal.animalNumber + '] 조회 결과가 없습니다. 이력번호를 확인하거나 수동으로 행을 클릭해 주세요.', 'warn', 0);
-    waitForManualApply(job);
-  }
+  // 팝업 열림/닫힘 감지 → 다음 동물로 이동
+  waitForManualApply(job);
 }
 
 // ══════════════════════════════════════════════════════════════
