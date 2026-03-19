@@ -545,13 +545,6 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-400 shadow-sm transition-all"
-            >
-              <Settings className="w-4 h-4 text-gray-500" />
-              업체 설정
-            </button>
-            <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-red-50 hover:border-red-300 hover:text-red-600 shadow-sm transition-all"
             >
