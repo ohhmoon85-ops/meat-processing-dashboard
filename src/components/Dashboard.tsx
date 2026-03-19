@@ -778,20 +778,6 @@ const Dashboard: React.FC = () => {
 
             {/* 버튼 영역 */}
             <div className="flex gap-2 justify-end flex-wrap">
-              {/* 가공생산/출고 등록 버튼 (1건 선택 시 활성) */}
-              <button
-                onClick={handleCutRegistration}
-                disabled={selectedCount !== 1}
-                title={selectedCount !== 1 ? '개체를 1건만 선택하세요' : '가공생산 / 출고 등록'}
-                className={`flex items-center px-4 py-3 rounded-lg font-semibold transition-all text-sm ${
-                  selectedCount !== 1
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-orange-500 text-white hover:bg-orange-600 shadow-md hover:shadow-lg'
-                }`}
-              >
-                <Factory className="w-4 h-4 mr-1.5" />
-                가공생산/출고 등록
-              </button>
               {/* 원패스 통합증명서 발급 자동화 버튼 */}
               <button
                 onClick={handleStartIssueJob}
