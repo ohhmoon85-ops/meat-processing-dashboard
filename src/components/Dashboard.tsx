@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { BrowserMultiFormatReader } from '@zxing/browser';
 import { FileText, CheckSquare, Upload, Scan, Plus, Trash2, X, ImageIcon, LogOut, ClipboardCheck } from 'lucide-react';
