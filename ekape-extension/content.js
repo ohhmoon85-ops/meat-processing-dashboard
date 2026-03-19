@@ -205,22 +205,21 @@ function transition(job, newPhase, extra) {
 }
 
 // ── 페이지 타입 감지 ─────────────────────────────────────────
+// EKAPE 원패스는 SPA (index.html) → URL이 아닌 DOM 내용으로 구분
 function detectPage() {
   var body = document.body ? document.body.innerText : '';
-  var url  = window.location.href;
 
-  // 발급신청 팝업 (window.opener 있음 + 납품처/부위 관련 텍스트)
-  if (window.opener && (body.includes('납품처') || body.includes('부위') || body.includes('발급신청'))) {
+  // 발급신청 팝업 (별도 창 → window.opener 있음)
+  if (window.opener) {
     return 'POPUP';
   }
-  // 통합증명서발급 목록 페이지 (REQUEST보다 먼저 체크)
-  if (body.includes('통합증명서') && (body.includes('확인서 발행') || body.includes('발급목록'))) {
+  // 통합증명서발급현황 페이지: '신청구분' 없고 '통합증명서발급현황' 또는 확인서원본발행 버튼
+  if (!body.includes('신청구분') &&
+      (body.includes('통합증명서발급현황') || body.includes('확인서원본발행'))) {
     return 'LIST';
   }
-  // 통합증명서신청 페이지:
-  //   · combineSearchOne.do(원패스 기본 검색)에도 "이력번호"가 있으므로 URL로 제외
-  //   · 이력번호/개체번호 입력 폼이 있는 페이지
-  if (!url.includes('combineSearchOne') && (body.includes('이력번호') || body.includes('개체번호'))) {
+  // 통합증명서신청 폼: '신청구분' 라디오가 이 페이지에만 있음
+  if (body.includes('신청구분')) {
     return 'REQUEST';
   }
   return 'OTHER';
@@ -364,18 +363,14 @@ async function phaseNavigateMenu(job) {
 //  FILL_ANIMAL → 소 선택, 매수인 선택, 이력번호 입력, 조회
 // ══════════════════════════════════════════════════════════════
 async function phaseFillAnimal(job) {
-  // 통합증명서신청 폼인지 확인 (매수인 또는 발급신청 텍스트 필수)
-  // combineSearchOne.do의 일반 검색창에서 잘못 실행되는 것을 방지
-  var bodyCheck = document.body.innerText;
-  if (!bodyCheck.includes('매수인') && !bodyCheck.includes('발급신청') && !bodyCheck.includes('납품처')) {
-    // 폼이 아직 로드 안 됐을 수 있으므로 최대 8초 대기
+  // 통합증명서신청 폼인지 확인 ('신청구분' 라디오가 있어야 함)
+  if (!document.body.innerText.includes('신청구분')) {
     try {
       await waitFor(function () {
-        var b = document.body.innerText;
-        return b.includes('매수인') || b.includes('발급신청') || b.includes('납품처');
+        return document.body.innerText.includes('신청구분');
       }, 8000);
     } catch (e) {
-      return; // 올바른 통합증명서신청 폼이 아님 — 실행하지 않음
+      return; // 통합증명서신청 폼이 아님 — 실행하지 않음
     }
   }
 
@@ -386,35 +381,35 @@ async function phaseFillAnimal(job) {
 
   await sleep(600);
 
-  // 소(한우/육우) 라디오 선택
-  var cattleSelected = clickRadioByText(['소', '한우', '육우', 'CATTLE', '01']);
-  if (!cattleSelected) {
-    // value가 "1" 또는 "01"인 라디오 시도
-    var radios = document.querySelectorAll('input[type=radio]');
-    for (var i = 0; i < radios.length; i++) {
-      if (radios[i].value === '1' || radios[i].value === '01') {
-        radios[i].click(); break;
-      }
+  // ① 동물 종류 탭 클릭 (소/돼지/닭 — 탭 버튼)
+  var animalType = animal.animalType || '소';
+  var tabs = document.querySelectorAll('button, a, li, td');
+  for (var i = 0; i < tabs.length; i++) {
+    if (tabs[i].textContent.trim() === animalType) {
+      tabs[i].click();
+      break;
     }
   }
+  await sleep(600);
+
+  // ② 신청구분: 매수인 라디오 선택
+  clickRadioByText(['매수인']);
   await sleep(400);
 
-  // 매수인 라디오 선택
-  clickRadioByText(['매수인', '매수', 'BUYER']);
-  await sleep(400);
+  // ③ 이력번호 입력 (필터 영역 — 이력번호 라벨 근처 input)
+  var lsNoInput = findInputByName(['lsNo', 'animalNo', 'traceNo', 'histNo', 'animalHistNo']) ||
+                  document.querySelector('input[placeholder*="이력번호"], input[placeholder*="개체번호"]');
 
-  // 이력번호 입력
-  var lsNoInput = findInputByName(['lsNo', 'animalNo', 'traceNo', 'histNo', 'cattleNo']) ||
-                  document.querySelector('input[placeholder*="이력번호"], input[placeholder*="개체번호"]') ||
-                  findByText(['input'], []);
-
-  // 이력번호 input이 없으면 텍스트 기반으로 가장 긴 text input 찾기
+  // 라벨 텍스트로 근처 input 탐색
   if (!lsNoInput) {
-    var allInputs = document.querySelectorAll('input[type=text], input:not([type])');
-    for (var ii = 0; ii < allInputs.length; ii++) {
-      if (allInputs[ii].offsetParent !== null) { // visible
-        lsNoInput = allInputs[ii];
-        break;
+    var allTh = document.querySelectorAll('th, td, label, span');
+    for (var k = 0; k < allTh.length; k++) {
+      if (allTh[k].textContent.trim() === '이력번호') {
+        var row = allTh[k].closest('tr, div');
+        if (row) {
+          var inputs = row.querySelectorAll('input[type=text], input:not([type])');
+          if (inputs.length > 0) { lsNoInput = inputs[inputs.length - 1]; break; }
+        }
       }
     }
   }
@@ -424,25 +419,49 @@ async function phaseFillAnimal(job) {
   } else {
     toast('[' + animal.animalNumber + '] 이력번호 입력 필드를 찾지 못했습니다.', 'warn');
   }
-  await sleep(500);
+  await sleep(400);
 
-  // 조회 버튼 클릭
-  var queryBtn = findByText(['button', 'input', 'a'], ['조회', '검색', 'Search']);
+  // ④ 조회 버튼 클릭
+  var queryBtn = findByText(['button'], ['조회']);
   if (queryBtn) {
     queryBtn.click();
-    toast('조회 중...', 'info');
+    toast('조회 중...', 'info', 3000);
   }
 
-  // 결과 대기 후 발급신청 클릭
+  // ⑤ 결과 행이 나타날 때까지 대기 후 첫 번째 행 클릭 → 팝업 열림
   try {
     await waitFor(function () {
-      return findByText(['button', 'input', 'a'], ['발급신청']);
-    }, 8000);
+      var tbody = document.querySelector('table tbody');
+      if (!tbody) return false;
+      var rows = tbody.querySelectorAll('tr');
+      return rows.length > 0 && rows[0].textContent.trim().length > 5;
+    }, 10000);
     await sleep(600);
-    transition(job, 'CLICK_APPLY');
-    phaseClickApply(job);
+
+    var tbody = document.querySelector('table tbody');
+    var firstRow = tbody ? tbody.querySelector('tr') : null;
+    if (firstRow) {
+      _popupRef = null;
+      transition(job, 'CLICK_APPLY');
+      firstRow.click(); // 행 클릭 → 팝업 열림
+
+      // 팝업 열림 확인
+      var waited = 0;
+      var popupTimer = setInterval(function () {
+        waited += 300;
+        if (_popupRef && !_popupRef.closed) {
+          clearInterval(popupTimer);
+          toast('발급신청 팝업 열림!', 'info');
+          waitForPopupClose(job);
+        } else if (waited > 5000) {
+          clearInterval(popupTimer);
+          toast('팝업이 열리지 않았습니다. 팝업 차단 해제 후 결과 행을 클릭해 주세요.', 'warn', 0);
+          waitForManualApply(job);
+        }
+      }, 300);
+    }
   } catch (e) {
-    toast('[' + animal.animalNumber + '] 조회 결과가 나타나지 않았습니다. 수동으로 발급신청을 클릭해 주세요.', 'warn', 0);
+    toast('[' + animal.animalNumber + '] 조회 결과가 없습니다. 이력번호를 확인하거나 수동으로 행을 클릭해 주세요.', 'warn', 0);
     waitForManualApply(job);
   }
 }
@@ -524,98 +543,131 @@ function waitForPopupClose(job) {
 async function phasePopup(job) {
   var animal = job.animals[job.currentIndex];
   toast('발급신청 팝업: ' + animal.animalNumber + ' 입력 중...', 'info');
-  await sleep(1000);
 
-  // ① 납품처 구분 select
-  var destTypeEl = findInputByName(['splyPlcCd', 'destTypeCd', 'plcTypeCd', 'custTypeCd']) ||
-    document.querySelector('select[name*="Type"], select[name*="type"], select[name*="Cd"]');
-  if (destTypeEl && destTypeEl.tagName === 'SELECT') {
+  // 팝업 DOM 로드 대기
+  try {
+    await waitFor(function () {
+      return document.body.innerText.includes('납품처구분') ||
+             document.body.innerText.includes('발급신청정보');
+    }, 8000);
+  } catch (e) {
+    toast('팝업 로드 실패. 수동으로 입력 후 발급신청을 클릭하세요. 팝업 닫으면 자동 진행됩니다.', 'warn', 0);
+    return;
+  }
+  await sleep(800);
+
+  // ① 납품처구분 select (급식학교/유치원/군부대 등)
+  var selects = document.querySelectorAll('select');
+  var destTypeEl = null;
+  for (var i = 0; i < selects.length; i++) {
+    var opts = selects[i].options;
+    for (var oi = 0; oi < opts.length; oi++) {
+      if (opts[oi].text.includes('급식학교') || opts[oi].text.includes('유치원') ||
+          opts[oi].text.includes('군부대') || opts[oi].text.includes('의료기관')) {
+        destTypeEl = selects[i];
+        break;
+      }
+    }
+    if (destTypeEl) break;
+  }
+  if (destTypeEl) {
     var destType = guessDestType(animal.destination);
     if (!selectByText(destTypeEl, destType)) {
       // 첫 번째 비어있지 않은 옵션 선택
-      var opts = destTypeEl.options;
-      for (var i = 1; i < opts.length; i++) {
-        if (opts[i].value) { destTypeEl.value = opts[i].value; break; }
+      for (var j = 1; j < destTypeEl.options.length; j++) {
+        if (destTypeEl.options[j].value) {
+          destTypeEl.value = destTypeEl.options[j].value;
+          destTypeEl.dispatchEvent(new Event('change', { bubbles: true }));
+          break;
+        }
       }
-      destTypeEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    await sleep(600);
+    await sleep(800); // 납품처 드롭다운 갱신 대기
   }
 
-  // ② 납품처 입력 (자동완성)
-  var destInput = findInputByName(['splyPlcNm', 'destNm', 'custNm', 'plcNm']) ||
-    document.querySelector('input[placeholder*="납품처"], input[placeholder*="업체"]');
-  if (destInput) {
-    var searchName = (animal.destination || '').replace(/\(.*?\)/g, '').trim();
-    destInput.focus();
-    setVal(destInput, searchName);
-    await sleep(1500);
-
-    // 자동완성 드롭다운 탐색
-    var dropdown = document.querySelector(
-      'ul.ui-autocomplete, .autocomplete-list, [class*="suggest"], [class*="dropdown"] ul, .search-list'
-    );
-    if (dropdown) {
-      var items = dropdown.querySelectorAll('li, a, div[role="option"]');
-      var matched = null;
-      for (var ii = 0; ii < items.length; ii++) {
-        if (items[ii].textContent.includes(searchName)) { matched = items[ii]; break; }
+  // ② 납품처 select (납품처구분 선택 후 옵션이 채워짐)
+  // 납품처구분 바로 다음 select가 납품처 select일 가능성이 높음
+  var destEl = null;
+  if (destTypeEl) {
+    var nextEl = destTypeEl.closest('tr, td')
+      ? destTypeEl.closest('tr').nextElementSibling
+      : null;
+    if (nextEl) destEl = nextEl.querySelector('select');
+    if (!destEl) {
+      // 모든 select 중 납품처구분 select 다음 select
+      for (var si = 0; si < selects.length - 1; si++) {
+        if (selects[si] === destTypeEl) { destEl = selects[si + 1]; break; }
       }
-      if (matched) {
-        matched.click();
-      } else if (items.length > 0) {
-        items[0].click();
-        toast('납품처 첫 번째 검색 결과를 선택했습니다. 확인 후 수동 수정이 필요할 수 있습니다.', 'warn');
-      }
-      await sleep(600);
-    } else {
-      // 검색 버튼이 있으면 클릭
-      var searchBtn = findByText(['button', 'a', 'input'], ['검색', '조회']);
-      if (searchBtn) { searchBtn.click(); await sleep(1000); }
-      var items2 = document.querySelectorAll('.search-result li, .result-list li');
-      if (items2.length > 0) items2[0].click();
     }
-  } else {
-    toast('납품처 입력란을 찾지 못했습니다. 수동으로 입력해 주세요.', 'warn');
   }
-  await sleep(500);
-
-  // ③ 발급구분 라디오: "급수불 발급" 선택
-  if (!clickRadioByText(['급수불 발급', '급수불', '급수'])) {
-    // 첫 번째 라디오 선택
-    var radios = document.querySelectorAll('input[type=radio]');
-    if (radios.length > 0 && !radios[0].checked) radios[0].click();
-  }
-  await sleep(400);
-
-  // ④ 부위 select
-  var cutEl = findInputByName(['cutCd', 'partCd', 'butchPartCd', 'partNm']) ||
-    document.querySelector('select[name*="cut"], select[name*="part"], select[name*="Cut"]');
-  if (cutEl && cutEl.tagName === 'SELECT') {
-    if (!selectByText(cutEl, animal.cutName || '')) {
-      toast('부위 "' + animal.cutName + '"을 드롭다운에서 찾지 못했습니다. 수동 선택 필요.', 'warn');
+  if (destEl && animal.destination) {
+    var name = (animal.destination || '').replace(/\(.*?\)/g, '').trim();
+    if (!selectByText(destEl, name)) {
+      toast('납품처 "' + name + '"를 목록에서 찾지 못했습니다. 수동 선택 필요.', 'warn', 0);
     }
     await sleep(400);
   }
 
-  // ⑤ 신청량 입력
-  var amtInput = findInputByName(['reqAmt', 'issueAmt', 'splyAmt', 'amt', 'weight']) ||
-    document.querySelector('input[placeholder*="신청량"], input[placeholder*="중량"]');
-  if (amtInput) {
-    setVal(amtInput, animal.weightKg || '');
+  // ③ 발급구분 라디오: 검수용 발급 (기본값 유지) — 필요 시 animal.issueType으로 선택
+  if (animal.issueType) {
+    clickRadioByText([animal.issueType]);
+  }
+  await sleep(300);
+
+  // ④ 부위 select
+  var cutEl = null;
+  for (var ci = 0; ci < selects.length; ci++) {
+    var copts = selects[ci].options;
+    for (var coi = 0; coi < copts.length; coi++) {
+      if (copts[coi].text.includes('양지') || copts[coi].text.includes('등심') ||
+          copts[coi].text.includes('갈비') || copts[coi].text.includes('안심')) {
+        cutEl = selects[ci];
+        break;
+      }
+    }
+    if (cutEl) break;
+  }
+  if (cutEl && animal.cutName) {
+    if (!selectByText(cutEl, animal.cutName)) {
+      toast('부위 "' + animal.cutName + '"을 드롭다운에서 찾지 못했습니다. 수동 선택 필요.', 'warn', 0);
+    }
     await sleep(300);
-  } else {
-    toast('신청량 입력란을 찾지 못했습니다. 수동 입력 필요.', 'warn');
+  }
+
+  // ⑤ 신청량 입력
+  var amtInput = findInputByName(['reqAmt', 'issueAmt', 'splyAmt', 'amt', 'weight', 'reqWeight']) ||
+    document.querySelector('input[placeholder*="신청량"], input[placeholder*="중량"]');
+  // kg 단위 옆 input 찾기
+  if (!amtInput) {
+    var kgSpans = document.querySelectorAll('span, td');
+    for (var ki = 0; ki < kgSpans.length; ki++) {
+      if (kgSpans[ki].textContent.trim() === 'kg') {
+        var prev = kgSpans[ki].previousElementSibling;
+        if (prev && prev.tagName === 'INPUT') { amtInput = prev; break; }
+        var parent = kgSpans[ki].closest('td, div');
+        if (parent) {
+          var inp = parent.querySelector('input');
+          if (inp) { amtInput = inp; break; }
+        }
+      }
+    }
+  }
+  if (amtInput && animal.weightKg) {
+    setVal(amtInput, String(animal.weightKg));
+    await sleep(300);
+  } else if (!amtInput) {
+    toast('신청량 입력란을 찾지 못했습니다. 수동 입력 후 발급신청을 클릭하세요. 팝업 닫으면 자동 진행됩니다.', 'warn', 0);
+    return;
   }
 
   // ⑥ 발급신청 버튼 클릭
-  await sleep(500);
-  var submitBtn = findByText(['button', 'input', 'a'], ['발급신청', '신청', '저장', '확인']);
+  await sleep(400);
+  var submitBtn = findByText(['button', 'input'], ['발급신청']);
   if (submitBtn) {
     toast('발급신청 클릭!', 'ok');
     submitBtn.click();
   } else {
-    toast('발급신청 버튼을 찾지 못했습니다. 수동으로 클릭해 주세요. 완료 후 팝업을 닫으면 자동 진행됩니다.', 'warn', 0);
+    toast('발급신청 버튼을 찾지 못했습니다. 수동으로 클릭해 주세요. 팝업 닫으면 자동 진행됩니다.', 'warn', 0);
   }
 }
 
@@ -791,15 +843,10 @@ async function main() {
       await phaseLoginWait(job);
     }
   } else if (job.phase === 'FILL_ANIMAL' || job.phase === 'CLICK_APPLY') {
-    // combineSearchOne.do(원패스 통합 검색)에서는 폼 대기 안 함 — 올바른 페이지가 아님
-    if (window.location.href.includes('combineSearchOne')) return;
-
-    // 메뉴 클릭 후 새 페이지가 로드됐으나 detectPage가 REQUEST를 감지 못한 경우
-    // 매수인/발급신청 폼이 나타날 때까지 MutationObserver로 대기
+    // 통합증명서신청 폼('신청구분')이 나타날 때까지 대기
     toast('통합증명서신청 폼 대기 중...', 'info', 3000);
     var fillObs = new MutationObserver(async function () {
-      var b = document.body.innerText;
-      if (b.includes('매수인') || b.includes('발급신청')) {
+      if (document.body.innerText.includes('신청구분')) {
         fillObs.disconnect();
         clearTimeout(fillObsTimeout);
         var freshJob = await getJob();
@@ -818,8 +865,7 @@ async function main() {
 
     // 이미 폼이 있으면 즉시 처리
     await sleep(600);
-    var bodyNow = document.body.innerText;
-    if (bodyNow.includes('매수인') || bodyNow.includes('발급신청')) {
+    if (document.body.innerText.includes('신청구분')) {
       fillObs.disconnect();
       clearTimeout(fillObsTimeout);
       await phaseFillAnimal(job);
@@ -837,7 +883,7 @@ chrome.storage.onChanged.addListener(async function (changes, area) {
 
   var page = detectPage();
 
-  // FILL_ANIMAL로 전환됐고, 이 프레임이 REQUEST 페이지면 즉시 처리
+  // FILL_ANIMAL로 전환됐고, 이 프레임/창이 통합증명서신청 폼이면 즉시 처리
   if (newJob.phase === 'FILL_ANIMAL' && page === 'REQUEST') {
     await sleep(800);
     var freshJob = await getJob();

@@ -7,7 +7,7 @@
  */
 
 const JOB_KEY = 'ekape_issue_job';
-const EKAPE_MAIN = 'https://www.ekape.or.kr/kapecp/oneservicemng/oneSrvcMng/combineSearchOne.do';
+const EKAPE_MAIN = 'https://www.ekape.or.kr/kapecp/ui/kapecp/index.html';
 
 // ── 메시지 처리 공통 로직 ─────────────────────────────────────
 function handleMessage(message, sendResponse) {
@@ -43,7 +43,8 @@ function handleMessage(message, sendResponse) {
           if (url.includes('ekape.or.kr')) { ekapeTab = allTabs[i]; break; }
         }
         if (ekapeTab && ekapeTab.id) {
-          chrome.tabs.update(ekapeTab.id, { active: true, url: EKAPE_MAIN });
+          // 기존 EKAPE 탭은 URL 변경 없이 포커스만 (사용자 현재 페이지 유지)
+          chrome.tabs.update(ekapeTab.id, { active: true });
         } else {
           chrome.tabs.create({ url: EKAPE_MAIN });
         }
